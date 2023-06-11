@@ -3,6 +3,7 @@ from pprint import pprint
 from requests import utils
 from time import sleep
 from typing import List, Dict, Generator
+from os import path
 import argparse
 import itertools
 import json
@@ -16,16 +17,26 @@ class ThreadsIndexer:
         self.verbose = args.verbose if args else True
 
     def threads_array_compose(self, data: List) -> List[Dict[str, dict[str, str]]]:
+        # 現行スレはリストに追加しないようにする
+        # 基準: "is_live" が 1 になっているか、 resnum < 1002 以下?
         return {
-            "https://%s/test/read.cgi/%s/%s/" % (
-                x['server'].rstrip(),
-                x['bbs'].rstrip(),
-                x['bbskey'].rstrip()): {
-                "thread_title": x["title"].rstrip()
-            } for x in data
+            "https://%s/test/read.cgi/%s/%s/" % (x['server'], x['bbs'], x['bbskey']): {
+                "ikioi": x["ikioi"],
+                "bbskey": x["bbskey"],
+                "created": x["created"],
+                "site": x["site"],
+                "is_live": x["is_live"],
+                "bbs": x["bbs"],
+                "is_update": x["is_update"],
+                "updated": x["updated"],
+                "id": x["id"],
+                "server": x["server"],
+                "title": x["title"].rstrip(),
+                "resnum": x["resnum"]
+            } for x in data if int(x["is_live"]) == 0
         }
 
-    def make_index(self) -> Dict[str, Dict[str, str]]:
+    def create_index(self) -> Dict[str, Dict[str, str]]:
         threads = {}
         generator = self.query_generator()
 
@@ -34,13 +45,9 @@ class ThreadsIndexer:
             data = self.download_one_thread(next(generator))
             if data:
                 threads.update(**data)
-                sleep(1)
+                sleep(2)
             else:
                 break
-
-        if self.verbose:
-            # pprint(threads, width=80)
-            pass
 
         if threads:
             print(c.BG_BLUE
@@ -55,10 +62,6 @@ class ThreadsIndexer:
 
     def download_one_thread(self, url: str) -> List[str]:
         r = requests.get(url=url, headers={})
-
-        if self.verbose:
-            # pprint([url, r.headers], width=30)
-            pass
 
         print("%s%s%s: %s" % (
             c.BG_BLUE if r.status_code == 200 else c.BG_RED,
@@ -101,20 +104,42 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument(
     '-v', '--verbose',
-    help="outputs redundant information",
+    help="Outputs redundant information",
     default=False
 )
 
+parser.add_argument(
+    'jsonpath', metavar="JSONPATH",
+    help="Path to the JSON file",
+)
+
+parser.add_argument(
+    '-q', '--query', metavar="QUERY",
+    help="What word would you like to look for? (default: %(default)s)", required=False, default="なんJNVA部"
+)
 
 if __name__ == "__main__":
 
+    def dict_diff(dict: dict, dicts: dict):
+        return {x: dicts[x] for x in dicts if x not in dict}
+
     try:
         args = parser.parse_args()
-        thread = ThreadsIndexer(query="なんJNVA部", args=args)
-        dump = json.dumps(thread.make_index())
-        # dump = thread.make_index(), indent=4, ensure_ascii=True)
-        # pprint(dump)
-        print(dump)
+        thread = ThreadsIndexer(args.query, args)
+        dict_retrieved = thread.create_index()
+
+        # もしあるなら過去のJSONを読み込む
+        if path.exists(args.jsonpath):
+            with open(args.jsonpath, encoding="utf-8") as fp:
+                past = json.loads(fp.read())
+
+            # 過去のJSONと比較して更新分だけ追加
+            dict_retrieved.update(dict_diff(dict_retrieved, past))
+
+        # JSONにシリアライズして書き込み
+        dump = json.dumps(dict_retrieved, ensure_ascii=False, indent=4)
+        with open(args.jsonpath, "w", encoding="utf-8") as fp:
+            fp.write(dump)
 
     except KeyboardInterrupt:
         pass
