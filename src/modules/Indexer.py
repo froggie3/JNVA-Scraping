@@ -1,13 +1,16 @@
 from Color import Color as c
-from pprint import pprint
-from requests import utils
-from time import sleep
-from typing import List, Dict, Generator
+from itertools import count
 from os import path
+from pprint import pprint
+from time import sleep
+from typing import List, Dict, Generator, TypeAlias
+from urllib.parse import quote
 import argparse
-import itertools
 import json
 import requests
+
+Thread: TypeAlias = Dict[str, Dict[str, int | str]]
+Threads: TypeAlias = Dict[str, Thread]
 
 
 class ThreadsIndexer:
@@ -16,7 +19,7 @@ class ThreadsIndexer:
         self.searchquery = query
         self.verbose = args.verbose if args else True
 
-    def threads_array_compose(self, data: List) -> List[Dict[str, dict[str, str]]]:
+    def threads_array_compose(self, data: List) -> Threads:
         # 現行スレはリストに追加しないようにする
         # 基準: "is_live" が 1 になっているか、 resnum < 1002 以下?
         return {
@@ -36,8 +39,8 @@ class ThreadsIndexer:
             } for x in data if int(x["is_live"]) == 0
         }
 
-    def create_index(self) -> Dict[str, Dict[str, str]]:
-        threads = {}
+    def create_index(self) -> Threads:
+        threads: Threads = {}
         generator = self.query_generator()
 
         while True:
@@ -60,7 +63,7 @@ class ThreadsIndexer:
                   + c.RESET)
             return {}
 
-    def download_one_thread(self, url: str) -> List[str]:
+    def download_one_thread(self, url: str) -> Threads:
         r = requests.get(url=url, headers={})
 
         print("%s%s%s: %s" % (
@@ -76,17 +79,17 @@ class ThreadsIndexer:
                 print(c.BG_WHITE
                       + "Reached the end of pages"
                       + c.RESET)
-                return []
+                return {}
         else:
             # サーバーが200以外を返したときの処理
             pass
-        return []
+        return {}
 
     def query_generator(self) -> Generator[str, None, None]:
 
-        for i in itertools.count():
+        for i in count():
             yield f"https://kakolog.jp/ajax/ajax_search.v16.cgi" \
-                + f"?q={utils.quote(self.searchquery)}" \
+                + f"?q={quote(self.searchquery)}" \
                 + "&custom_date=" \
                 + "&d=" \
                 + "&o=" \
@@ -115,7 +118,8 @@ parser.add_argument(
 
 parser.add_argument(
     '-q', '--query', metavar="QUERY",
-    help="What word would you like to look for? (default: %(default)s)", required=False, default="なんJNVA部"
+    help="What word would you like to look for? (default: %(default)s)",
+    required=False, default="なんJNVA部"
 )
 
 if __name__ == "__main__":
