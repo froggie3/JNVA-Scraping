@@ -135,7 +135,7 @@ if __name__ == "__main__":
         # もしあるなら過去のJSONを読み込む
         if path.exists(args.jsonpath):
             with open(args.jsonpath, encoding="utf-8") as fp:
-                past = json.loads(fp.read())
+                past = json.load(fp)
 
             # 過去のJSONと比較して更新分だけ追加
             dict_retrieved.update(dict_diff(dict_retrieved, past))
@@ -147,3 +147,40 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         pass
+
+
+def create_table():
+    cur.execute("""
+    CREATE TABLE bruh_table (
+        ikioi INTEGER,
+        bbskey INTEGER,
+        created TEXT,
+        site TEXT,
+        is_live TEXT,
+        bbs TEXT,
+        is_update TEXT,
+        updated TEXT,
+        id TEXT,
+        server TEXT,
+        title TEXT,
+        resnum INTEGER
+        )""")
+
+
+def insert_records():
+    cur.executemany("""
+    INSERT INTO bruh_table
+    VALUES (
+        :ikioi,
+        :bbskey,
+        :created,
+        :site,
+        :is_live,
+        :bbs,
+        :is_update,
+        :updated,
+        :id,
+        :server,
+        :title,
+        :resnum
+        )""", json.values())

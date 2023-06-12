@@ -74,20 +74,6 @@ class ThreadsDownloader:
         return None
 
 
-parser = argparse.ArgumentParser(
-    prog='threaddl',
-    description='Download multiple threads in HTML based on a list')
-
-parser.add_argument(
-    'jsonpath', metavar="JSON",
-    help="Path to JSON containing thread URLs and titles",
-)
-parser.add_argument(
-    'destination', metavar="DESTINATION",
-    help="The directory for thread to be downloaded",
-)
-
-
 def start_task(path_to_JSON: str, save_directory: str):
     thread = ThreadsDownloader()
 
@@ -97,7 +83,7 @@ def start_task(path_to_JSON: str, save_directory: str):
 
     # タスクリスト
     with open(path_to_JSON, encoding="utf-8") as fp:
-        threads: Dict[str, str] = json.loads(fp.read())
+        threads: Dict[str, str] = json.load(fp)
 
     print(c.BG_WHITE
           + "Started downloading archives..."
@@ -133,6 +119,13 @@ def save_to(self, text, file_path) -> None:
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(
+        prog='threaddl',
+        description='Download multiple threads in HTML based on a list')
+    parser.add_argument('jsonpath', metavar="JSON",
+                        help="Path to JSON containing thread URLs and titles",)
+    parser.add_argument('destination', metavar="DESTINATION",
+                        help="The directory for thread to be downloaded",)
     try:
         args = parser.parse_args()
         start_task(args.jsonpath, args.destination)
