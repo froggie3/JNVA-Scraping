@@ -1,6 +1,5 @@
 from color import Color as c
 from itertools import count
-from itertools import count
 from os import path
 from pprint import pprint
 from time import sleep
