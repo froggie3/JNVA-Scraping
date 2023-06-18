@@ -1,14 +1,12 @@
 from color import Color as c
+from database import Database
 from itertools import count
-from os import path
 from pprint import pprint
 from time import sleep
-from typing import List, Dict, Generator, TypeAlias, Any
+from typing import List, Dict, Generator, TypeAlias
 from urllib.parse import quote
 import argparse
-import json
 import requests
-import sqlite3
 
 Thread: TypeAlias = Dict[str, int | str]
 Threads: TypeAlias = Dict[str, Thread]
@@ -101,17 +99,7 @@ class ThreadsIndexer:
                 + "&star="
 
 
-class Database:
-
-    def __init__(self):
-        pass
-
-    def connect_database(self):
-        # self.con = sqlite3.connect(":memory:")
-        self.con = sqlite3.connect("db.db")
-        self.cur = self.con.cursor()
-
-        return self
+class IndexerDB (Database):
 
     def create_table(self):
         self.cur.execute("""
@@ -145,14 +133,6 @@ class Database:
 
         return self
 
-    def commit(self):
-        self.con.commit()
-        return self
-
-    def close(self):
-        self.con.close()
-        return
-
     def test(self):
         # pprint(cur.execute("SELECT name FROM sqlite_master WHERE TYPE='table'").fetchall())
         # pprint(cur.execute("SELECT * FROM sqlite_master").fetchall())
@@ -162,82 +142,45 @@ class Database:
         return self
 
 
-parser = argparse.ArgumentParser(
-    prog='threadindexer',
-    description='Convert a thread in HTML into JSON')
+if __name__ == "__main__":
 
-parser.add_argument(
-    '-v', '--verbose',
-    help="Outputs redundant information",
-    default=False
-)
+    parser = argparse.ArgumentParser(
+        prog='threadindexer',
+        description='Convert a thread in HTML into JSON')
 
-parser.add_argument(
-    'jsonpath', metavar="JSONPATH",
-    help="Path to the JSON file",
-)
+    parser.add_argument(
+        '-q', '--query', metavar="QUERY",
+        help="What word would you like to look for? (default: %(default)s)",
+        required=False, default="なんJNVA部"
+    )
 
-parser.add_argument(
-    '-q', '--query', metavar="QUERY",
-    help="What word would you like to look for? (default: %(default)s)",
-    required=False, default="なんJNVA部"
-)
+    parser.add_argument(
+        '-s', '--skip', action='store_true',
+        help="skip the process of downloading", default=False, required=False
+    )
 
-parser.add_argument(
-    '-s', '--skip', action='store_true',
-    help="skip the process of downloading", default=False, required=False
-)
+    try:
 
-parser.add_argument(
-    '--json-out', action='store_true',
-    help="enables JSON output", default=False, required=False
-)
+        args = parser.parse_args()
+        print(args)
 
+        db = IndexerDB()
+        db.connect_database()
 
-def main():
-    args = parser.parse_args()
-    print(args)
+        if args.skip:
+            dict_retrieved = {}
+        else:
+            thread = ThreadsIndexer(args.query, vars(args))
+            dict_retrieved = thread.create_index()
+            dict_retrieved = {x: dict_retrieved[x]
+                              for x in reversed(dict_retrieved)}
 
-    if args.skip:
-        dict_retrieved = {}
-    else:
-        thread = ThreadsIndexer(args.query, vars(args))
-        dict_retrieved = thread.create_index()
-        dict_retrieved = {x: dict_retrieved[x]
-                          for x in reversed(dict_retrieved)}
-
-    # もしあるなら過去のJSONを読み込む
-    if path.exists(args.jsonpath):
-        with open(args.jsonpath, encoding="utf-8") as fp:
-            past = json.load(fp)
-            past = {x: past[x] for x in reversed(past)}
-
-        # 過去のJSONと比較して更新分だけ追加
-        dict_retrieved.update(dict_diff(dict_retrieved, past))
-
-    if args.json_out:
-        # JSONにシリアライズして書き込み
-        dump = json.dumps(dict_retrieved, ensure_ascii=False, indent=4)
-        with open(args.jsonpath, "w", encoding="utf-8") as fp:
-            fp.write(dump)
-    else:
-        # データベース
-        db = Database()
-        db.connect_database() \
-            .create_table() \
+        # データベースに更新分だけ追加
+        db.create_table() \
             .insert_records(dict_retrieved) \
             .commit() \
             .test() \
             .close()
-
-
-if __name__ == "__main__":
-
-    def dict_diff(dict: Dict[str, Any], dicts: Dict[str, Any]):
-        return {x: dicts[x] for x in dicts if x not in dict}
-
-    try:
-        main()
 
     except KeyboardInterrupt:
         pass

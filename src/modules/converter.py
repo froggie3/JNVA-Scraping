@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 from color import Color as c
+from database import Database
 from datetime import datetime, timezone, timedelta
 from multiprocessing import cpu_count, Pool
 from pprint import pprint
@@ -7,7 +8,6 @@ from re import findall
 from typing import List, Dict, Tuple, TypeAlias, Any
 import argparse
 import json
-import sqlite3
 
 Post: TypeAlias = Dict[str, int | str]
 Posts: TypeAlias = Dict[int, Post]
@@ -93,12 +93,7 @@ class Converter:
         return json.dumps(self.threads, **kwargs)
 
 
-class Database:
-
-    def connect_database(self):
-        self.con = sqlite3.connect("src/modules/db.db")
-        self.cur = self.con.cursor()
-        return self
+class ConverterDB(Database):
 
     def create_tables(self):
         self.cur.execute("""
@@ -126,17 +121,6 @@ class Database:
         )""", threads.values())
         return self
 
-    def rollback(self):
-        self.con.rollback()
-
-    def commit(self):
-        self.con.commit()
-        return self
-
-    def close(self):
-        self.con.close()
-        return
-
     def test(self):
         pprint(self.cur.execute("SELECT * FROM messages").fetchall())
         return
@@ -159,14 +143,16 @@ def convert_parallel(bbskey: int, text: str):
 
 
 if __name__ == "__main__":
+
     try:
+
         parser = argparse.ArgumentParser(
             prog='threadconv', description='Convert a thread in HTML into JSON')
         args = parser.parse_args()
 
-        db = Database()
+        db = ConverterDB()
         db.connect_database() \
-            .create_tables()
+          .create_tables()
 
         # bbskey を取得する
         bbskeys = [key[0] for key in

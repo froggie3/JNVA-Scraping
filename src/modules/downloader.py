@@ -1,4 +1,5 @@
 from color import Color as c
+from database import Database
 from os import path, makedirs
 from pprint import pprint
 from requests.exceptions import HTTPError
@@ -9,7 +10,6 @@ import codecs
 import json
 import re
 import requests
-import sqlite3
 
 Response: TypeAlias = requests.models.Response
 Thread: TypeAlias = Dict[str, Dict[str, int | str]]
@@ -83,19 +83,7 @@ class ThreadsDownloader:
         return None
 
 
-class Database:
-
-    def __init__(self):
-        pass
-
-    def connect_database(self):
-        # self.con = sqlite3.connect(":memory:")
-        self.con = sqlite3.connect("db.db")
-        self.cur = self.con.cursor()
-        return self
-
-    def create_table(self):
-        return self
+class DownloaderDB(Database):
 
     def update(self, bbskey: str, markup: str):
         self.cur.execute("""
@@ -105,17 +93,6 @@ class Database:
             "text": markup
         })
         return self
-
-    def rollback(self):
-        self.con.rollback()
-
-    def commit(self):
-        self.con.commit()
-        return self
-
-    def close(self):
-        self.con.close()
-        return
 
     def test(self):
         # pprint(cur.execute("SELECT name FROM sqlite_master WHERE TYPE='table'").fetchall())
@@ -171,7 +148,7 @@ def create_download_list() -> List:
 def start_task(path_to_JSON: str) -> None:
 
     thread = ThreadsDownloader()
-    db = Database()
+    db = DownloaderDB()
     db.connect_database()
 
     # ダウンロードURLを生成
