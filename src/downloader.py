@@ -293,7 +293,7 @@ class ConverterDB(Database):
 
     def insert_records(self, threads: Posts):
         self.cur.executemany("""
-        INSERT INTO messages 
+        INSERT OR IGNORE INTO messages 
         VALUES (
             :bbskey, 
             :number, 
@@ -347,9 +347,11 @@ class DownloadError(Exception):
 def convert_parallel(bbskey: int, text: str):
     thread = Converter(text)
     threads = thread.convert(bbskey)
-    print(c.GREEN
-          + f"Thread conversion for {bbskey}: finished!"
-          + c.RESET)
+    print(f"Thread conversion - "
+          + c.GREEN
+          + str(bbskey)
+          + c.RESET
+          + " OK")
     return threads
 
 

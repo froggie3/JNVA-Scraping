@@ -113,7 +113,8 @@ if __name__ == "__main__":
             .create_views()
 
     except OperationalError as e:
-        print(e)
+        #print(e)
+        pass
 
     finally:
         create_db \
