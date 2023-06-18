@@ -18,15 +18,14 @@ Threads: TypeAlias = Dict[str, Thread]
 
 class ThreadsDownloader:
 
-    def generate_response(self, threads: Dict[str, str]) -> Generator[str | None, None, None]:
+    def generate_response(self, threads: List[str]) -> Generator[str | None, None, None]:
         """
         条件に応じて、fetch_thread() を回す
         """
-        skip = False
         for url in threads:
-            if skip:  # すでに重複したレコードがあるとき
-                continue
+
             thread = self.fetch_thread(url)
+
             if thread:
                 # Replace "Shift_JIS" with "UTF-8" in meta tag
                 yield thread.replace('charset=Shift_JIS', 'charset="UTF-8"')
@@ -94,141 +93,66 @@ class DownloaderDB(Database):
         })
         return self
 
-    def test(self):
-        # pprint(cur.execute("SELECT name FROM sqlite_master WHERE TYPE='table'").fetchall())
-        # pprint(cur.execute("SELECT * FROM sqlite_master").fetchall())
-        pprint(self.cur
-               .execute("SELECT * FROM thread_indexes")
-               .fetchall())
-        return self
-    
-    def fetchall(self):
-        self.cur.fetchall()
-        return self
-
 
 class DownloadError(Exception):
     pass
 
 
-def create_download_list() -> List:
+if __name__ == "__main__":
 
-    def obsolete_prepare() -> List:
-        # タスクリスト
-        with open(path_to_JSON, encoding="utf-8") as fp:
-            threads = json.load(fp)
-        return threads
+    parser = argparse.ArgumentParser(
+        prog='threaddl',
+        description='Download multiple threads in HTML based on a list'
+    )
 
-    def prepare() -> List:
-        print(c.BG_WHITE
-              + "Looking for thread indexes..."
-              + c.RESET)
-        
-
-        pass
-
-    def exists_bbskey() -> bool:
-        """データベースにすでにレコードがあるかを調べる"""
-        
-        db.cur.execute("SELECT thread_indexes WHERE bbskey = ?", (bbskey, ))
-        
-
-        exists_bbskey = db.cur.fetchone() is not None
-        return exists_bbskey
-
-    def download():
-        print(c.BG_WHITE
-              + "Started downloading archives..."
-              + c.RESET)
-        pass
-
-    pass
-
-
-def start_task(path_to_JSON: str) -> None:
+    args = parser.parse_args()
 
     thread = ThreadsDownloader()
+
     db = DownloaderDB()
+
     db.connect_database()
 
     # ダウンロードURLを生成
-    db.cur.execute("SELECT server, bbs, bbskey from thread_indexes WHERE bbskey = ?", (bbskey, ))
+    rows = db.cur.execute("SELECT * FROM difference")
+    threads = rows.fetchall()
 
-    threads = 
-
-    # https://fate.5ch.net/test/read.cgi/liveuranus/1686204895/
-    # (\w+)/(\d+)/$
-
-    generator = thread.generate_response(threads)
+    # ダウンロード
+    generator = thread.generate_response(
+        ["https://%s/test/read.cgi/%s/%s/" % (x[0], x[1], x[2])
+         for x in threads]
+    )
 
     for i in threads:
-        title: str = threads[i]['title']
-        bbskey: str = threads[i]['bbskey']  # bbs key in JSON
+
+        bbskey: str = threads[i][2]  # bbs key in JSON
+        title: str = threads[i][3]
 
         print(c.BLUE
               + f"Downloading a webpage for {title} ... "
                 + c.RESET, end="")
 
         try:
-            if True:
-                pass
-            else:
-                print('exists!')
-
-            # text = next(generator)  # raw text from HTML
-
-            # if text is None:
-            #     raise DownloadError(
-            #         "The page was failed to be retrieved and skipped "
-            #         + "due to an error while the process of downloading.\n"
-            #     )
-            pass
+            text = next(generator)  # raw text from HTML
+            if text is None:
+                raise DownloadError(
+                    "The page was failed to be retrieved and skipped "
+                    + "due to an error while the process of downloading.\n"
+                )
 
         except (KeyboardInterrupt, DownloadError) as e:
             print(*[c.BG_RED, e, c.RESET])
             print(c.GREEN
                   + "Saving the progress of what you have downloaded so far to database."
                   + c.RESET)
-            # db.commit()
+            db.commit()
             db.close()
-            return
+            exit
 
         else:
             db.update(bbskey, text)
 
         print(c.GREEN + f"OK" + c.RESET)
-        # print(text)
-        # save_to(text, path.join(save_directory, f"{title}.html"))
 
-    # db.commit()
+    db.commit()
     db.close()
-
-
-def save_to(text: str, file_path: str) -> None:
-    """
-    取得したテキストを指定のパス名で保存する
-    """
-    with codecs.open(file_path, "w", "utf-8") as fp:
-        fp.write(text)
-    print(c.BG_WHITE
-          + f"Exported to {file_path}"
-          + c.RESET)
-
-
-def main() -> None:
-
-    parser = argparse.ArgumentParser(
-        prog='threaddl',
-        description='Download multiple threads in HTML based on a list')
-    parser.add_argument('jsonpath', metavar="JSON",
-                        help="Path to JSON containing thread URLs and titles",)
-    # parser.add_argument('destination', metavar="DESTINATION",
-    #                     help="The directory for thread to be downloaded",)
-    args = parser.parse_args()
-
-    # start_task(args.jsonpath, args.destination)
-    start_task(args.jsonpath)
-
-
-if __name__ == "__main__":
-    main()

@@ -95,19 +95,6 @@ class Converter:
 
 class ConverterDB(Database):
 
-    def create_tables(self):
-        self.cur.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            bbskey INTEGER,
-            number INTEGER, 
-            name TEXT, 
-            date TEXT, 
-            uid TEXT, 
-            message TEXT,
-            UNIQUE (bbskey, number)
-        )""")
-        return self
-
     def insert_records(self, threads: Posts):
         self.cur.executemany("""
         INSERT INTO messages 
@@ -135,13 +122,6 @@ def convert_parallel(bbskey: int, text: str):
     return threads
 
 
-# def convert_single(bbskey: int, text: str):
-#     for x in raw_texts:
-#         thread = Converter(x)
-#         threads = thread.convert()
-#         print(len(threads))
-
-
 if __name__ == "__main__":
 
     try:
@@ -151,8 +131,7 @@ if __name__ == "__main__":
         args = parser.parse_args()
 
         db = ConverterDB()
-        db.connect_database() \
-          .create_tables()
+        db.connect_database()
 
         # bbskey を取得する
         bbskeys = [key[0] for key in
@@ -171,8 +150,6 @@ if __name__ == "__main__":
 
         for thread in threads:
             db.insert_records(thread)
-
-        # pprint(db.test())
 
         print("archiving ...")
 

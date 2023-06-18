@@ -51,7 +51,7 @@ class ThreadsIndexer:
                 break
 
         if threads:
-            print(c.BG_BLUE
+            print(c.BLUE
                   + "Succeeded to retrieve thread names and links"
                   + c.RESET)
             return threads
@@ -74,13 +74,12 @@ class ThreadsIndexer:
                 # データを抽出して格納して次のページへ遷移
                 return self.threads_array_compose(r.json()["list"])
             else:
-                print(c.BG_WHITE
-                      + "Reached the end of pages"
-                      + c.RESET)
+                print("Reached the end of pages")
                 return {}
         else:
             # サーバーが200以外を返したときの処理
             pass
+
         return {}
 
     def query_generator(self) -> Generator[str, None, None]:
@@ -101,22 +100,6 @@ class ThreadsIndexer:
 
 class IndexerDB (Database):
 
-    def create_table(self):
-        self.cur.execute("""
-        CREATE TABLE IF NOT EXISTS thread_indexes (
-            server TEXT,
-            bbs TEXT,
-            bbskey INTEGER,
-            title TEXT,
-            resnum INTEGER,
-            created TEXT,
-            updated TEXT,
-            raw_text TEXT,
-            UNIQUE (bbs, bbskey)
-        )""")
-
-        return self
-
     def insert_records(self, data: Threads):
         self.cur.executemany("""
         INSERT OR IGNORE INTO thread_indexes
@@ -131,14 +114,6 @@ class IndexerDB (Database):
             ''
             )""", data.values())
 
-        return self
-
-    def test(self):
-        # pprint(cur.execute("SELECT name FROM sqlite_master WHERE TYPE='table'").fetchall())
-        # pprint(cur.execute("SELECT * FROM sqlite_master").fetchall())
-        pprint(self.cur
-               .execute("SELECT * FROM thread_indexes")
-               .fetchall())
         return self
 
 
@@ -160,15 +135,14 @@ if __name__ == "__main__":
     )
 
     try:
-
         args = parser.parse_args()
-        print(args)
 
         db = IndexerDB()
         db.connect_database()
 
         if args.skip:
             dict_retrieved = {}
+
         else:
             thread = ThreadsIndexer(args.query, vars(args))
             dict_retrieved = thread.create_index()
@@ -176,10 +150,8 @@ if __name__ == "__main__":
                               for x in reversed(dict_retrieved)}
 
         # データベースに更新分だけ追加
-        db.create_table() \
-            .insert_records(dict_retrieved) \
+        db.insert_records(dict_retrieved) \
             .commit() \
-            .test() \
             .close()
 
     except KeyboardInterrupt:
