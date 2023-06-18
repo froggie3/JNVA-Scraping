@@ -1,7 +1,32 @@
-from downloader import Database
-from pprint import pprint
+#from pprint import pprint
 from sqlite3 import OperationalError
 from textwrap import dedent
+import os
+import sqlite3
+
+
+class Database:
+
+    def connect_database(self):
+        # self.con = sqlite3.connect(":memory:")
+        self.con = sqlite3.connect(
+            os.environ['JNAIDB_DIR']
+            or os.path.join(os.environ['HOME'], 'db.db')
+            or os.path.join(os.environ['USERPROFILE'], 'db.db')
+        )
+        self.cur = self.con.cursor()
+        return self
+
+    def rollback(self):
+        self.con.rollback()
+
+    def commit(self):
+        self.con.commit()
+        return self
+
+    def close(self):
+        self.con.close()
+        return
 
 
 class DBCreation(Database):
@@ -102,8 +127,10 @@ class DBCreation(Database):
         return self
 
 
-if __name__ == "__main__":
-
+def create_database():
+    """
+    データベースを作成し、テーブルとビューを作成する
+    """
     create_db = DBCreation()
     create_db.connect_database()
 
@@ -113,10 +140,15 @@ if __name__ == "__main__":
             .create_views()
 
     except OperationalError as e:
-        #print(e)
+        print(e)
         pass
 
     finally:
         create_db \
             .commit() \
             .close()
+
+
+if __name__ == "__main__":
+
+    create_database()

@@ -1,7 +1,8 @@
 from bs4 import BeautifulSoup
-from modules.color import Color as c
+from database_helper import Database, create_database
 from datetime import datetime, timezone, timedelta
 from itertools import count
+from modules.color import Color as c
 from multiprocessing import cpu_count, Pool
 from pprint import pprint
 from re import findall
@@ -11,7 +12,6 @@ from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 from urllib.parse import quote
 import argparse
 import json
-import os
 import re
 import requests
 import sqlite3
@@ -22,30 +22,6 @@ Thread: TypeAlias = Dict[str, int | str]
 Threads: TypeAlias = Dict[str, Thread]
 Post: TypeAlias = Dict[str, int | str]
 Posts: TypeAlias = Dict[int, Post]
-
-
-class Database:
-
-    def connect_database(self):
-        # self.con = sqlite3.connect(":memory:")
-        self.con = sqlite3.connect(
-            os.environ['JNAIDB_DIR']
-            or os.path.join(os.environ['HOME'], 'db.db')
-            or os.path.join(os.environ['USERPROFILE'], 'db.db')
-        )
-        self.cur = self.con.cursor()
-        return self
-
-    def rollback(self):
-        self.con.rollback()
-
-    def commit(self):
-        self.con.commit()
-        return self
-
-    def close(self):
-        self.con.close()
-        return
 
 
 class ThreadsIndexer:
@@ -77,7 +53,7 @@ class ThreadsIndexer:
         threads: Threads = {}
         generator = self.query_generator()
 
-        for i in count():
+        while True:
             # 取得できるまで繰り返す
             data = self.download_one_thread(next(generator))
             if data:
@@ -323,7 +299,7 @@ class IndexerDB (Database):
             :created,
             :updated,
             ''
-            )""", data.values())
+        )""", data.values())
 
         return self
 
@@ -356,6 +332,9 @@ def convert_parallel(bbskey: int, text: str):
 
 
 if __name__ == "__main__":
+    """
+    スレッドとレス（ポスト）は区別する
+    """
 
     parser = argparse.ArgumentParser(
         prog='threaddl',
@@ -386,69 +365,92 @@ if __name__ == "__main__":
         dict_retrieved = {}
 
     else:
-        thread = ThreadsIndexer(args.query, vars(args))
-        dict_retrieved = thread.create_index()
+        indx = ThreadsIndexer(args.query, vars(args))
+        dict_retrieved = indx.create_index()
         dict_retrieved = {x: dict_retrieved[x]
                           for x in reversed(dict_retrieved)}
 
-    # データベースに更新分だけ追加
-    db.insert_records(dict_retrieved) \
-        .commit() \
-        .close()
+    # リトライ用のループ
+    for _ in range(2):
+
+        try:
+            # データベースに更新分だけ追加
+            db.insert_records(dict_retrieved) \
+                .commit() \
+                .close()
+            break   # 正常終了でリトライループから抜ける
+
+        except Exception as e:
+            # pprint(e.args)
+            if "no such table" in "".join(e.args):
+                print(sqlite3.OperationalError)
+                print("テーブルが見つかりませんでした。データーベースを作成します。")
+                create_database()
+                print(c.GREEN + "再試行します" + c.RESET)
 
     #
     # スレッドのダウンロード
     #
 
-    thread = ThreadsDownloader()
+    dldr = ThreadsDownloader()
 
     db = DownloaderDB()
     db.connect_database()
 
     # ダウンロードURLを生成
-    rows = db.cur.execute("SELECT * FROM difference")
-    threads = rows.fetchall()  # [(0, 1, 2), ]
+    posts = db.cur \
+        .execute("""
+        SELECT
+            server,
+            bbs,
+            bbskey,
+            title
+        FROM
+            thread_indexes
+        WHERE
+            raw_text IS ?
+        """, ('',)) \
+        .fetchall()  # [(0, 1, 2), ]
 
     # ダウンロード
-    generator = thread.generate_response(
+    generator = dldr.generate_response(
         ["https://%s/test/read.cgi/%s/%s/" % (x[0], x[1], x[2])
-         for x in threads]
+         for x in posts]
     )
 
-    for thread in threads:
+    for post in posts:
 
-        bbskey: str = thread[2]  # bbs key in JSON
-        title: str = thread[3]
+        bbskey: str = post[2]  # bbs key in JSON
+        title: str = post[3]
 
-        print(f"Downloading a webpage for "
-              + c.BLUE + title + c.RESET
-              + " ... ", end="")
+        print(f"{c.GREEN + title + c.RESET} ... ", end="")
 
         try:
-
             text = next(generator)  # raw text from HTML
             if text is None:
                 raise DownloadError(
                     "The page was failed to be retrieved and skipped "
                     + "due to an error while the process of downloading.\n"
                 )
+            db.update(bbskey, text)
 
         except (KeyboardInterrupt, DownloadError) as e:
-            # ダウンロードを中断したときのレジューム動作が上手くいかない
-
-            print(*[c.BG_RED, e, c.RESET])
-            print(c.GREEN
-                  + "Saving the progress of what you have downloaded so far to database."
+            db \
+                .commit() \
+                .close()
+            print(c.BG_RED
+                  + "".join(e.args)
                   + c.RESET)
-            db.close()
-
+            print(c.GREEN
+                  + "Saved the progress of what you have downloaded so far to database."
+                  + c.RESET)
             exit(1)
 
+        # 正常終了
         else:
-            db.update(bbskey, text)
             db.commit()
 
-        print(c.GREEN + f"OK" + c.RESET)
+        print(c.GREEN + f"[OK]" + c.RESET)
 
     db.close()
 
@@ -461,25 +463,32 @@ if __name__ == "__main__":
 
     # bbskey を取得する
     bbskeys = [key[0] for key in
-               db.cur.execute("SELECT bbskey from thread_indexes")]
+               db.cur.execute("SELECT bbskey from difference")]
 
     process_args: List[Tuple[int, str]] = []
     # bbskey をキーに raw_text からデータをとってくる
     for bbskey in bbskeys:
         for j in db.cur.execute(
-                "SELECT raw_text from thread_indexes WHERE bbskey = ?", (int(bbskey),)):
+                """
+                SELECT
+                    raw_text
+                from
+                    thread_indexes
+                WHERE
+                    bbskey = ?
+                """, (int(bbskey),)):
             process_args.append((int(bbskey), *j))
 
     # マルチプロセスで処理
     with Pool(processes=cpu_count() // 2) as pool:
-        threads = pool.starmap(convert_parallel, process_args)
+        thread_processed = pool.starmap(convert_parallel, process_args)
 
-    for thread in threads:
-        db.insert_records(thread)
+    for thread_in_processed in thread_processed:
+        db.insert_records(thread_in_processed)
 
-    print("archiving ...")
+    print("Archiving ...")
 
     db.commit() \
-        .close()
+      .close()
 
     print(c.GREEN + "All threads saved." + c.RESET)
