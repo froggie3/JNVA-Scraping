@@ -1,10 +1,10 @@
-from database import Database
+from downloader import Database
 from pprint import pprint
 from sqlite3 import OperationalError
 from textwrap import dedent
 
 
-class DBCreation (Database):
+class DBCreation(Database):
 
     def __thread_indexes(self):
         """
@@ -114,7 +114,6 @@ if __name__ == "__main__":
 
     except OperationalError as e:
         print(e)
-        
 
     finally:
         create_db \
