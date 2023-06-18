@@ -3,24 +3,23 @@ from itertools import count
 from os import path
 from pprint import pprint
 from time import sleep
-from typing import List, Dict, Generator, TypeAlias
+from typing import List, Dict, Generator, TypeAlias, Any
 from urllib.parse import quote
 import argparse
 import json
 import requests
 import sqlite3
 
-Thread: TypeAlias = Dict[str, Dict[str, int | str]]
+Thread: TypeAlias = Dict[str, int | str]
 Threads: TypeAlias = Dict[str, Thread]
 
 
 class ThreadsIndexer:
 
-    def __init__(self, query, args=None) -> None:
+    def __init__(self, query: str, args: Dict[str, str | bool]) -> None:
         self.searchquery = query
-        self.verbose = args.verbose if args else True
 
-    def threads_array_compose(self, data: List) -> Threads:
+    def threads_array_compose(self, data: List[Dict[str, str]]) -> Threads:
         # 現行スレはリストに追加しないようにする
         # 基準: "is_live" が 1 になっているか、 resnum < 1002 以下?
         return {
@@ -115,25 +114,6 @@ class Database:
         return self
 
     def create_table(self):
-        # self.cur.execute("""
-        # CREATE TABLE IF NOT EXISTS thread_indexes (
-        #     ikioi INTEGER,
-        #     bbskey INTEGER,
-        #     created TEXT,
-        #     site TEXT,
-        #     is_live TEXT,
-        #     bbs TEXT,
-        #     is_update TEXT,
-        #     updated TEXT,
-        #     id TEXT TEXT,
-        #     server TEXT,
-        #     title TEXT,
-        #     resnum INTEGER,
-        #     UNIQUE (
-        #         bbs, 
-        #         bbskey
-        #         )
-        #     )""")
         self.cur.execute("""
         CREATE TABLE IF NOT EXISTS thread_indexes (
             server TEXT,
@@ -144,31 +124,12 @@ class Database:
             created TEXT,
             updated TEXT,
             raw_text TEXT,
-            UNIQUE (
-                bbs, 
-                bbskey
-                )
-            )""")
+            UNIQUE (bbs, bbskey)
+        )""")
 
         return self
 
     def insert_records(self, data: Threads):
-        # self.cur.executemany("""
-        # INSERT OR IGNORE INTO thread_indexes
-        # VALUES (
-        #     :ikioi,
-        #     :bbskey,
-        #     :created,
-        #     :site,
-        #     :is_live,
-        #     :bbs,
-        #     :is_update,
-        #     :updated,
-        #     :id,
-        #     :server,
-        #     :title,
-        #     :resnum
-        #     )""", data.values())
         self.cur.executemany("""
         INSERT OR IGNORE INTO thread_indexes
         VALUES (
@@ -181,7 +142,7 @@ class Database:
             :updated,
             ''
             )""", data.values())
-        
+
         return self
 
     def commit(self):
@@ -192,7 +153,7 @@ class Database:
         self.con.close()
         return
 
-    def test(self) -> None:
+    def test(self):
         # pprint(cur.execute("SELECT name FROM sqlite_master WHERE TYPE='table'").fetchall())
         # pprint(cur.execute("SELECT * FROM sqlite_master").fetchall())
         pprint(self.cur
@@ -240,10 +201,10 @@ def main():
     if args.skip:
         dict_retrieved = {}
     else:
-        thread = ThreadsIndexer(args.query, args)
+        thread = ThreadsIndexer(args.query, vars(args))
         dict_retrieved = thread.create_index()
         dict_retrieved = {x: dict_retrieved[x]
-                            for x in reversed(dict_retrieved)}
+                          for x in reversed(dict_retrieved)}
 
     # もしあるなら過去のJSONを読み込む
     if path.exists(args.jsonpath):
@@ -269,9 +230,10 @@ def main():
             .test() \
             .close()
 
+
 if __name__ == "__main__":
 
-    def dict_diff(dict: dict, dicts: dict):
+    def dict_diff(dict: Dict[str, Any], dicts: Dict[str, Any]):
         return {x: dicts[x] for x in dicts if x not in dict}
 
     try:

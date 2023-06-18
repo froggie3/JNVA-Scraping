@@ -12,28 +12,33 @@ import requests
 import sqlite3
 
 Response: TypeAlias = requests.models.Response
+Thread: TypeAlias = Dict[str, Dict[str, int | str]]
+Threads: TypeAlias = Dict[str, Thread]
 
 
 class ThreadsDownloader:
 
     def generate_response(self, threads: Dict[str, str]) -> Generator[str | None, None, None]:
         """
-        fetch_thread()を回す
+        条件に応じて、fetch_thread() を回す
         """
+        skip = False
         for url in threads:
+            if skip:  # すでに重複したレコードがあるとき
+                continue
             thread = self.fetch_thread(url)
-            if thread is None:
-                yield thread
-                return
-            # Replace "Shift_JIS" with "UTF-8" in meta tag
-            yield thread.replace('charset=Shift_JIS', 'charset="UTF-8"')
-            sleep(2)
+            if thread:
+                # Replace "Shift_JIS" with "UTF-8" in meta tag
+                yield thread.replace('charset=Shift_JIS', 'charset="UTF-8"')
+                sleep(2)
+            else:
+                yield thread  # None
 
-    def fetch_thread(self, url) -> str | None:
+    def fetch_thread(self, url: str) -> str | None:
         """
         スレッドが返ってくるまでダウンロードを試行
         """
-        def has_response(text) -> bool:
+        def has_response(text: str) -> bool:
             """
             Gone. が返ってきたら False を返す
             """
@@ -59,7 +64,7 @@ class ThreadsDownloader:
 
         def extract_hostname_from(url: str) -> str:
             matched = re.search(
-                "(?:https?://)((?:[\w-]+(?:\.[\w-]+){1,}))",
+                r"(?:https?://)((?:[\w-]+(?:\.[\w-]+){1,}))",
                 url.strip())
             return matched.group(1) if matched else url.strip()
 
@@ -73,6 +78,8 @@ class ThreadsDownloader:
                     sleep(3)
                 else:
                     return response.text
+            else:
+                sleep(3)
         return None
 
 
@@ -85,13 +92,12 @@ class Database:
         # self.con = sqlite3.connect(":memory:")
         self.con = sqlite3.connect("db.db")
         self.cur = self.con.cursor()
-
         return self
 
     def create_table(self):
         return self
 
-    def update(self, bbskey: int, markup: str, ):
+    def update(self, bbskey: str, markup: str):
         self.cur.execute("""
         UPDATE thread_indexes  SET raw_text = :text  WHERE bbskey = :bbskey
         """, {
@@ -99,6 +105,9 @@ class Database:
             "text": markup
         })
         return self
+
+    def rollback(self):
+        self.con.rollback()
 
     def commit(self):
         self.con.commit()
@@ -108,32 +117,67 @@ class Database:
         self.con.close()
         return
 
-    def test(self) -> None:
+    def test(self):
         # pprint(cur.execute("SELECT name FROM sqlite_master WHERE TYPE='table'").fetchall())
         # pprint(cur.execute("SELECT * FROM sqlite_master").fetchall())
         pprint(self.cur
                .execute("SELECT * FROM thread_indexes")
                .fetchall())
         return self
+    
+    def fetchall(self):
+        self.cur.fetchall()
+        return self
+
+
+class DownloadError(Exception):
+    pass
+
+
+def create_download_list() -> List:
+
+    def obsolete_prepare() -> List:
+        # タスクリスト
+        with open(path_to_JSON, encoding="utf-8") as fp:
+            threads = json.load(fp)
+        return threads
+
+    def prepare() -> List:
+        print(c.BG_WHITE
+              + "Looking for thread indexes..."
+              + c.RESET)
+        
+
+        pass
+
+    def exists_bbskey() -> bool:
+        """データベースにすでにレコードがあるかを調べる"""
+        
+        db.cur.execute("SELECT thread_indexes WHERE bbskey = ?", (bbskey, ))
+        
+
+        exists_bbskey = db.cur.fetchone() is not None
+        return exists_bbskey
+
+    def download():
+        print(c.BG_WHITE
+              + "Started downloading archives..."
+              + c.RESET)
+        pass
+
+    pass
 
 
 def start_task(path_to_JSON: str) -> None:
+
     thread = ThreadsDownloader()
-
-    print(c.BG_WHITE
-          + "Looking for thread indexes..."
-          + c.RESET)
-
-    # タスクリスト
-    with open(path_to_JSON, encoding="utf-8") as fp:
-        threads: Dict[str, str] = json.load(fp)
-
-    print(c.BG_WHITE
-          + "Started downloading archives..."
-          + c.RESET)
-
     db = Database()
     db.connect_database()
+
+    # ダウンロードURLを生成
+    db.cur.execute("SELECT server, bbs, bbskey from thread_indexes WHERE bbskey = ?", (bbskey, ))
+
+    threads = 
 
     # https://fate.5ch.net/test/read.cgi/liveuranus/1686204895/
     # (\w+)/(\d+)/$
@@ -141,36 +185,34 @@ def start_task(path_to_JSON: str) -> None:
     generator = thread.generate_response(threads)
 
     for i in threads:
-        title = threads[i]['title']
-        bbskey = threads[i]['bbskey']  # bbs key in JSON
+        title: str = threads[i]['title']
+        bbskey: str = threads[i]['bbskey']  # bbs key in JSON
 
         print(c.BLUE
               + f"Downloading a webpage for {title} ... "
                 + c.RESET, end="")
 
-        # データベースにすでにレコードがあるかを調べる
-
-        # その場合、リクエストをしないという処理を書きたいが
-        # 面倒くさい send() で何とかできるか？
-
         try:
-            text = next(generator)  # raw text from HTML
+            if True:
+                pass
+            else:
+                print('exists!')
 
-            if text is None:
-                print("")
-                print(c.BG_RED
-                      + "The page was failed to be retrieved and skipped "
-                      + "due to an error while the process of downloading.\n"
-                      + "Please relieve the download list in JSON (or something)"
-                      + "will be kept intact."
-                      + c.RESET)
-                # ジェネレータ使ってるせいでリトライしづらくなってる
-                # コストが重いジェネレータ
-                return
+            # text = next(generator)  # raw text from HTML
 
-        except KeyboardInterrupt as e:
-            print(e)
-            db.commit()
+            # if text is None:
+            #     raise DownloadError(
+            #         "The page was failed to be retrieved and skipped "
+            #         + "due to an error while the process of downloading.\n"
+            #     )
+            pass
+
+        except (KeyboardInterrupt, DownloadError) as e:
+            print(*[c.BG_RED, e, c.RESET])
+            print(c.GREEN
+                  + "Saving the progress of what you have downloaded so far to database."
+                  + c.RESET)
+            # db.commit()
             db.close()
             return
 
@@ -181,11 +223,11 @@ def start_task(path_to_JSON: str) -> None:
         # print(text)
         # save_to(text, path.join(save_directory, f"{title}.html"))
 
-    db.commit()
+    # db.commit()
     db.close()
 
 
-def save_to(self, text, file_path) -> None:
+def save_to(text: str, file_path: str) -> None:
     """
     取得したテキストを指定のパス名で保存する
     """
