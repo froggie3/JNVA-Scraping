@@ -6,9 +6,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from itertools import count
 from multiprocessing import Pool, cpu_count
-# from pprint import pprint
 from re import findall
-from textwrap import dedent
 from time import sleep
 from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 from urllib.parse import quote
@@ -73,20 +71,13 @@ class ThreadsIndexer:
             """
             r = requests.get(url, headers={})
 
-            print("%s%s%s" % (
-                c.BG_BLUE if r.status_code == 200 else c.BG_RED,
-                r.status_code,
-                c.RESET),
-                end=" "
-            )
-
             # サーバーが200以外を返したときの処理
             if r.status_code != requests.codes.ok:
                 continue
 
             # 最後のページに達した
             if not r.json().get('list'):
-                print(c.BLUE, "最後のページ", c.RESET, sep="")
+                print(f"{c.BLUE}最後のページ{c.RESET}")
                 break
 
             print(f"ダウンロード完了 ({page + 1} ページ目)")
@@ -121,7 +112,7 @@ class ThreadsIndexer:
             if threads_chunk:
                 # 抽出されたデータを辞書に格納する
                 self.threads.update(**threads_chunk)
-                sleep(2)
+                sleep(args.sleep)
             else:
                 # list[] が空になった？
                 break
@@ -131,25 +122,14 @@ class ThreadsIndexer:
     def __message(self):
 
         if self.threads:
-            print(dedent(
-                f"""
-                {c.BLUE}
-                インデックスの取得に成功しました
-                {c.RESET}
-                """).strip())
+            print(f"{c.BLUE}インデックスの取得に成功しました{c.RESET}")
         else:
-            print(dedent(
-                f"""
-                {c.RED}
-                インデックスの取得に失敗しました
-                {c.RESET}
-                """).strip())
+            print(f"{c.RED}インデックスの取得に失敗しました{c.RESET}")
 
         return self
 
     def get_index(self) -> Threads:
-        self.__request_api() \
-            .__message()
+        self.__request_api().__message()
 
         return self.threads
 
@@ -257,7 +237,7 @@ class ThreadsDownloader:
             if thread:
                 # Replace "Shift_JIS" with "UTF-8" in meta tag
                 yield thread.replace('charset=Shift_JIS', 'charset="UTF-8"')
-                sleep(2)
+                sleep(args.sleep)
             else:
                 yield thread  # None
 
@@ -270,11 +250,7 @@ class ThreadsDownloader:
             Gone. が返ってきたら False を返す
             """
             if "Gone.\n" in text:
-                print(
-                    c.BG_RED,
-                    "Received invalid response. Retrying...",
-                    c.RESET,
-                    sep="")
+                print(f"{c.BG_RED}Received invalid response. Retrying...{c.RESET}")
                 return False
             return True
 
@@ -304,11 +280,11 @@ class ThreadsDownloader:
             if response is not None:
                 has_valid_response = has_response(response.text)
                 if not has_valid_response:
-                    sleep(3)
+                    sleep(args.sleep)
                 else:
                     return response.text
             else:
-                sleep(3)
+                sleep(args.sleep)
         return None
 
 
@@ -421,24 +397,21 @@ class DownloadError(Exception):
 def convert_parallel(bbskey: int, text: str):
     thread = Converter(text)
     threads = thread.convert(bbskey)
-    print("Thread conversion",
-          c.GREEN,
-          str(bbskey),
-          c.RESET,
-          "OK")
+    print(f"Thread conversion {c.GREEN}{str(bbskey)}{c.RESET} OK")
     return threads
 
 
 def database_not_found(error: Exception):
-    # pprint(e.args)
+
     for arg in error.args:
         if arg.find("no such table"):
             print(traceback.format_exc())
-            print(c.RED,
-                  "エラーが発生したで！\n\n",
-                  c.RESET,
-                  "database_helper.py を実行してテーブルを作成するんや\n",
-                  sep="")
+            print(
+                f"""
+                {c.RED,}エラーが発生したで！{c.RESET}
+
+                "database_helper.py を実行してテーブルを作成するんや
+                """)
     exit(1)
 
 
@@ -468,17 +441,27 @@ if __name__ == "__main__":
         '--skip',
         action='store_true',
         default=False,
-        help="インデックスのダウンロードをスキップする (変換処理だけしたいとき便利です)",
+        help="インデックスを取得しない (変換処理だけしたいとき便利です)",
         required=False,
     )
 
     parser.add_argument(
         '-c',
         '--cores',
-        type=int,
         default=cpu_count() // 2,
         help="指定した数のコアを変換処理に使う (このコンピュータでの既定: %(default)s)",
         required=False,
+        type=int,
+    )
+
+    parser.add_argument(
+        '-t',
+        '--sleep',
+        default=5,
+        help="どれくらいの間隔で落とすか (既定: %(default)s秒)",
+        metavar="secs",
+        required=False,
+        type=int,
     )
 
     args = parser.parse_args()
@@ -496,12 +479,7 @@ if __name__ == "__main__":
     else:
         indx = ThreadsIndexer(args.query, vars(args))
 
-        print(dedent(
-            f"""
-            {c.BLUE}
-            インデックスを取得します
-            {c.RESET}
-            """).strip())
+        print(f"{c.BLUE}インデックスを取得します{c.RESET}")
 
         dict_retrieved = indx.get_index()
         dict_retrieved = {x: dict_retrieved[x]
@@ -509,12 +487,11 @@ if __name__ == "__main__":
 
     try:
         # データベースに更新分だけ追加
-        db \
-            .insert_indexes(dict_retrieved) \
-            .commit()
+        db.insert_indexes(dict_retrieved).commit()
 
     except Exception as e:
         database_not_found(e)
+        db.close()
 
     #
     # スレッドのダウンロード
@@ -526,10 +503,7 @@ if __name__ == "__main__":
     posts = db.fetch_only_resumable()  # [(0, 1, 2), ]
 
     if posts:
-        print(c.GREEN,
-              "スレッドを取得します",
-              c.RESET,
-              sep='\n')
+        print(f"{c.GREEN}スレッドを取得します{c.RESET}")
 
     # ダウンロード
     generator = dldr.generate_response(
@@ -542,12 +516,7 @@ if __name__ == "__main__":
         bbskey: str = post[2]  # bbs key in JSON
         title: str = post[3]
 
-        print(c.GREEN,
-              title,
-              c.RESET,
-              "...",
-              sep="",
-              end="")
+        print(f"{c.GREEN}{title}{c.RESET} ... ", end="")
 
         try:
             text = next(generator)  # raw text from HTML
@@ -558,19 +527,12 @@ if __name__ == "__main__":
             db.update_raw_data(bbskey, text)
 
         except (KeyboardInterrupt, DownloadError) as e:
-            db \
-                .commit() \
-                .close()
+            db.commit().close()
 
-            print(c.BG_RED,
-                  "".join(e.args),
-                  c.RESET,
-                  sep="")
+            print(f"{c.BG_RED}{''.join(e.args)}{c.RESET}")
 
-            print(c.GREEN,
-                  "Saved the progress of what you have downloaded.",
-                  c.RESET,
-                  sep="")
+            print(
+                f"{c.GREEN}Saved the progress of what you have downloaded.{c.RESET}")
 
             exit(1)
 
@@ -578,17 +540,10 @@ if __name__ == "__main__":
         else:
             db.commit()
 
-        print(c.GREEN,
-              "[OK]",
-              c.RESET)
+        print(f"{c.GREEN}[OK]{c.RESET}")
 
     if posts:
-        print(dedent(
-            f"""
-            {c.GREEN,}
-            スレッドの取得に成功しました
-            {c.RESET}
-            """).strip())
+        print(f"{c.GREEN}スレッドの取得に成功しました{c.RESET}")
 
     #
     # 変換処理
@@ -605,12 +560,7 @@ if __name__ == "__main__":
         database_not_found(e)
 
     if bbskeys:
-        print(dedent(
-            f"""
-            {c.GREEN}
-            変換処理を開始します
-            {c.RESET}
-            """).strip)
+        print(f"{c.GREEN}変換処理を開始します{c.RESET}")
 
     process_args: List[Tuple[int, str]] = []
     # bbskey をキーに raw_text からデータをとってくる
@@ -626,22 +576,11 @@ if __name__ == "__main__":
         for thread_in_processed in thread_processed:
             db.insert_messages(thread_in_processed)
 
-        print(dedent(
-            """
-            アーカイブ中 ...
-            """).strip())
+        print("アーカイブ中 ...")
 
         db.commit().close()
 
-        print(dedent(
-            f"""
-            {c.GREEN}
-            全てのスレッドを保存しました
-            {c.RESET}
-            """).strip())
+        print(f"{c.GREEN}全てのスレッドを保存しました{c.RESET}")
 
     else:
-        print(dedent(
-            """
-            更新はありません
-            """).strip())
+        print("更新はありません")
