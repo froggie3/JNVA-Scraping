@@ -1,31 +1,31 @@
 # from pprint import pprint
-from sqlite3 import OperationalError
-from textwrap import dedent
-from modules.color import Color as c
 import os
 import sqlite3
 import traceback
+from sqlite3 import OperationalError
+from textwrap import dedent
+
+from modules.color import Color as c
 
 
 class Database:
 
     def connect_database(self):
-        # self.con = sqlite3.connect(":memory:")
-        self.con = sqlite3.connect(
+        self.connect = sqlite3.connect(
             os.environ['JNAIDB_PATH']
         )
-        self.cur = self.con.cursor()
+        self.cursor = self.connect.cursor()
         return self
 
     def rollback(self):
-        self.con.rollback()
+        self.connect.rollback()
 
     def commit(self):
-        self.con.commit()
+        self.connect.commit()
         return self
 
     def close(self):
-        self.con.close()
+        self.connect.close()
         return
 
 
@@ -36,7 +36,7 @@ class DBCreation(Database):
         外部ウェブサイトから取得したスレッドのインデックスを格納する
         """
 
-        self.cur.execute(dedent("""
+        self.cursor.execute(dedent("""
         CREATE TABLE IF NOT EXISTS thread_indexes(
             server TEXT,
             bbs TEXT,
@@ -56,7 +56,7 @@ class DBCreation(Database):
         スレッドがレコードとして格納されるテーブル
         """
 
-        self.cur.execute(dedent("""
+        self.cursor.execute(dedent("""
         CREATE TABLE IF NOT EXISTS messages(
             bbskey INTEGER,
             number INTEGER,
@@ -75,7 +75,7 @@ class DBCreation(Database):
         差分のビューを作るのに必要
         """
 
-        self.cur.execute(dedent("""
+        self.cursor.execute(dedent("""
         CREATE VIEW IF NOT EXISTS difference_bbskey AS
         SELECT
             bbskey
@@ -98,7 +98,7 @@ class DBCreation(Database):
         アーカイブ済みの場所にある bbskey とインデックスのそれの差分
         """
 
-        self.cur.execute(dedent("""
+        self.cursor.execute(dedent("""
         CREATE VIEW IF NOT EXISTS difference AS
         SELECT
             server,
