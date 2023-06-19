@@ -30,26 +30,31 @@ and then,
 rye sync
 ```
 
-## How to Use
-
-before you start, create database (once you do, forget it!)
-```bash
-python database_helper.py
-```
-And then
-```bash
-python downloader.py
-```
-for more information,
-```
-python downloader.py --help
-```
+## Before you start
 
 ### Setting the environmental variable
 
-for your preference, you can set the environmental variable for this program.
+you need to set the environmental variable for this program.
 ```
-JNAIDB_DIR=$HOME/db.db
+# change as you prefer
+echo 'export JNAIDB_PATH=$HOME/.jnaidb.sqlite3' >> $HOME/.bashrc
+export JNAIDB_PATH=$HOME/.jnaidb.sqlite3
+```
+
+### Create database
+
+once you do, you can forget it!
+
+```bash
+python3 database_helper.py
+```
+
+## How to Use
+
+for more information : `--help`
+
+```bash
+python3 downloader.py
 ```
 
 ## Requisites
