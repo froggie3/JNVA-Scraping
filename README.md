@@ -11,14 +11,14 @@ Things gonna be done with Python altogether!
 
 Setup Python venv.
 
-|Shell|Command to enable venv| |
-|:----|:----|:----|
-|bash/zsh|$ source <venv>/bin/activate| |
-|fish|$ source <venv>/bin/activate.fish| |
-|csh/tcsh|$ source <venv>/bin/activate.csh| |
-|PowerShell|$ <venv>/bin/Activate.ps1| |
-|cmd.exe|C:\> <venv>\Scripts\activate.bat| |
-|PowerShell|PS C:\> <venv>\Scripts\Activate.ps1| |
+|Shell|Command to enable venv|
+|:----|:----|
+|bash/zsh|$ source <venv>/bin/activate|
+|fish|$ source <venv>/bin/activate.fish|
+|csh/tcsh|$ source <venv>/bin/activate.csh|
+|PowerShell|$ <venv>/bin/Activate.ps1|
+|cmd.exe|C:\> <venv>\Scripts\activate.bat|
+|PowerShell|PS C:\> <venv>\Scripts\Activate.ps1|
 
 We use this package managing method for this tool, so then install this:
 
