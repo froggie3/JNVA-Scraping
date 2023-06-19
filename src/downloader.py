@@ -12,7 +12,7 @@ from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 from urllib.parse import quote
 import argparse
 import json
-import os
+#import os
 import re
 import requests
 import traceback
@@ -352,7 +352,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description='スレッドをデータベースに保存する',
-        epilog="なお、環境変数 'JNAIDB_DIR' を利用することも可能です",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -362,15 +361,6 @@ if __name__ == "__main__":
         default="なんJNVA部",
         help="検索クエリを指定 (既定:「%(default)s」)",
         metavar="query",
-        required=False,
-    )
-
-    parser.add_argument(
-        '-d',
-        '--save',
-        default=os.environ['HOME'],
-        help="データーベースファイルの保存パスを指定\n" + "既定では %(default)s に保存されます\n",
-        metavar="dest",
         required=False,
     )
 

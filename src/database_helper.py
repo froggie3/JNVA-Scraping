@@ -1,8 +1,10 @@
 # from pprint import pprint
 from sqlite3 import OperationalError
 from textwrap import dedent
+from modules.color import Color as c
 import os
 import sqlite3
+import traceback
 
 
 class Database:
@@ -10,9 +12,7 @@ class Database:
     def connect_database(self):
         # self.con = sqlite3.connect(":memory:")
         self.con = sqlite3.connect(
-            os.environ['JNAIDB_DIR']
-            or os.path.join(os.environ['HOME'], 'db.db')
-            or os.path.join(os.environ['USERPROFILE'], 'db.db')
+            os.environ['JNAIDB_PATH']
         )
         self.cur = self.con.cursor()
         return self
@@ -132,7 +132,20 @@ def create_database():
     データベースを作成し、テーブルとビューを作成する
     """
     create_db = DBCreation()
-    create_db.connect_database()
+
+    try:
+        create_db.connect_database()
+
+    except KeyError as e:
+        print(traceback.format_exc(), end='')
+        if "JNAIDB_PATH" in "".join(e.args):
+            print(dedent(
+                f"""
+                環境変数にデータベースの保存先を設定してください
+                {c.GREEN + "(e.g.)" + c.RESET} echo 'export JNAIDB_PATH=$HOME/.jnaidb.sqlite3' >> $HOME/.bashrc
+                {c.GREEN + "(e.g.)" + c.RESET} export JNAIDB_PATH=$HOME/.jnaidb.sqlite3
+                """).strip())
+        exit(1)
 
     try:
         create_db \
@@ -142,6 +155,13 @@ def create_database():
     except OperationalError as e:
         print(e)
         pass
+
+    else:
+        print(dedent(
+            f"""
+            データベースファイルの場所は {os.environ['JNAIDB_PATH']} です
+            正常終了しました
+            """).strip())
 
     finally:
         create_db \
