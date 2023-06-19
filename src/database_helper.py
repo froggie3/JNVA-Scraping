@@ -1,4 +1,4 @@
-#from pprint import pprint
+# from pprint import pprint
 from sqlite3 import OperationalError
 from textwrap import dedent
 import os
@@ -37,7 +37,7 @@ class DBCreation(Database):
         """
 
         self.cur.execute(dedent("""
-        CREATE TABLE thread_indexes(
+        CREATE TABLE IF NOT EXISTS thread_indexes(
             server TEXT,
             bbs TEXT,
             bbskey INTEGER,
@@ -57,7 +57,7 @@ class DBCreation(Database):
         """
 
         self.cur.execute(dedent("""
-        CREATE TABLE messages(
+        CREATE TABLE IF NOT EXISTS messages(
             bbskey INTEGER,
             number INTEGER,
             name TEXT,
@@ -76,7 +76,7 @@ class DBCreation(Database):
         """
 
         self.cur.execute(dedent("""
-        CREATE VIEW difference_bbskey AS
+        CREATE VIEW IF NOT EXISTS difference_bbskey AS
         SELECT
             bbskey
         FROM
@@ -99,7 +99,7 @@ class DBCreation(Database):
         """
 
         self.cur.execute(dedent("""
-        CREATE VIEW difference AS
+        CREATE VIEW IF NOT EXISTS difference AS
         SELECT
             server,
             bbs,

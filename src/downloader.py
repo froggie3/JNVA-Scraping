@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from database_helper import Database, create_database
+from database_helper import Database
 from datetime import datetime, timezone, timedelta
 from itertools import count
 from modules.color import Color as c
@@ -12,9 +12,10 @@ from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 from urllib.parse import quote
 import argparse
 import json
+import os
 import re
 import requests
-import sqlite3
+import traceback
 
 
 Response: TypeAlias = requests.models.Response
@@ -64,12 +65,12 @@ class ThreadsIndexer:
 
         if threads:
             print(c.BLUE
-                  + "Succeeded to retrieve thread names and links"
+                  + "インデックスの取得に成功しました"
                   + c.RESET)
             return threads
         else:
             print(c.RED
-                  + "Failed to retrieve threads names and links"
+                  + "インデックスの取得に失敗しました"
                   + c.RESET)
             return {}
 
@@ -86,7 +87,7 @@ class ThreadsIndexer:
                 # データを抽出して格納して次のページへ遷移
                 return self.threads_array_compose(r.json()["list"])
             else:
-                print("Reached the end of pages")
+                # reaches the end of pages
                 return {}
         else:
             # サーバーが200以外を返したときの処理
@@ -99,15 +100,18 @@ class ThreadsIndexer:
         for i in count():
             yield f"https://kakolog.jp/ajax/ajax_search.v16.cgi" \
                 + f"?q={quote(self.searchquery)}" \
-                + "&custom_date=" \
-                + "&d=" \
-                + "&o=" \
-                + "&resnum=" \
-                + "&bbs=" \
-                + "&custom_resnum=" \
-                + "&custom_resnum_dir=up" \
-                + f"&p={i}" \
-                + "&star="
+                + f"&p={i}"
+            # yield f"https://kakolog.jp/ajax/ajax_search.v16.cgi" \
+            #     + f"?q={quote(self.searchquery)}" \
+            #     + "&custom_date=" \
+            #     + "&d=" \
+            #     + "&o=" \
+            #     + "&resnum=" \
+            #     + "&bbs=" \
+            #     + "&custom_resnum=" \
+            #     + "&custom_resnum_dir=up" \
+            #     + f"&p={i}" \
+            #     + "&star="
 
 
 class Converter:
@@ -331,25 +335,52 @@ def convert_parallel(bbskey: int, text: str):
     return threads
 
 
+def database_not_found(error: Exception):
+    # pprint(e.args)
+    if "no such table" in "".join(e.args):
+        print(traceback.format_exc())
+        print(c.RED + "エラーが発生したで！\n\n" + c.RESET
+              + "database_helper.py を実行してテーブルを作成するんや\n"
+              )
+    exit(1)
+
+
 if __name__ == "__main__":
     """
     スレッドとレス（ポスト）は区別する
     """
 
     parser = argparse.ArgumentParser(
-        prog='threaddl',
-        description='Download multiple threads in HTML based on a list'
+        description='スレッドをデータベースに保存する',
+        epilog="なお、環境変数 'JNAIDB_DIR' を利用することも可能です",
+        formatter_class=argparse.RawTextHelpFormatter
     )
 
     parser.add_argument(
-        '-q', '--query', metavar="QUERY",
-        help="What word would you like to look for? (default: %(default)s)",
-        required=False, default="なんJNVA部"
+        '-q',
+        '--query',
+        default="なんJNVA部",
+        help="検索クエリを指定 (既定:「%(default)s」)",
+        metavar="query",
+        required=False,
     )
 
     parser.add_argument(
-        '-s', '--skip', action='store_true',
-        help="skip the process of downloading", default=False, required=False
+        '-d',
+        '--save',
+        default=os.environ['HOME'],
+        help="データーベースファイルの保存パスを指定\n" + "既定では %(default)s に保存されます\n",
+        metavar="dest",
+        required=False,
+    )
+
+    parser.add_argument(
+        '-s',
+        '--skip',
+        action='store_true',
+        default=False,
+        help="インデックスのダウンロードをスキップ\n" + "変換処理だけしたいとき便利です",
+        required=False,
     )
 
     args = parser.parse_args()
@@ -370,23 +401,14 @@ if __name__ == "__main__":
         dict_retrieved = {x: dict_retrieved[x]
                           for x in reversed(dict_retrieved)}
 
-    # リトライ用のループ
-    for _ in range(2):
+    try:
+        # データベースに更新分だけ追加
+        db.insert_records(dict_retrieved) \
+            .commit() \
+            .close()
 
-        try:
-            # データベースに更新分だけ追加
-            db.insert_records(dict_retrieved) \
-                .commit() \
-                .close()
-            break   # 正常終了でリトライループから抜ける
-
-        except Exception as e:
-            # pprint(e.args)
-            if "no such table" in "".join(e.args):
-                print(sqlite3.OperationalError)
-                print("テーブルが見つかりませんでした。データーベースを作成します。")
-                create_database()
-                print(c.GREEN + "再試行します" + c.RESET)
+    except Exception as e:
+        database_not_found(e)
 
     #
     # スレッドのダウンロード
@@ -460,10 +482,14 @@ if __name__ == "__main__":
 
     db = ConverterDB()
     db.connect_database()
+    bbskeys = []
 
-    # bbskey を取得する
-    bbskeys = [key[0] for key in
-               db.cur.execute("SELECT bbskey from difference")]
+    try:
+        # bbskey を取得する
+        bbskeys = [key[0] for key in
+                   db.cur.execute("SELECT bbskey from difference")]
+    except Exception as e:
+        database_not_found(e)
 
     process_args: List[Tuple[int, str]] = []
     # bbskey をキーに raw_text からデータをとってくる
@@ -483,12 +509,14 @@ if __name__ == "__main__":
     with Pool(processes=cpu_count() // 2) as pool:
         thread_processed = pool.starmap(convert_parallel, process_args)
 
-    for thread_in_processed in thread_processed:
-        db.insert_records(thread_in_processed)
+    if thread_processed:
+        for thread_in_processed in thread_processed:
+            db.insert_records(thread_in_processed)
 
-    print("Archiving ...")
+        print("アーカイブ中 ...")
 
-    db.commit() \
-      .close()
+        db.commit().close()
 
-    print(c.GREEN + "All threads saved." + c.RESET)
+        print(c.GREEN + "全てのスレッドを保存しました" + c.RESET)
+    else:
+        print("更新はありません")
