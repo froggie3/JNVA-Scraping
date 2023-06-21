@@ -2,6 +2,7 @@ import argparse
 import json
 # import os
 import re
+import sys
 import traceback
 from datetime import datetime, timedelta, timezone
 from itertools import count
@@ -204,7 +205,7 @@ class Converter:
 
     def __add_bbskey(self, bbskey: int):
         """
-        データーベースの正規化のために bbskey を付与する
+        データベースの正規化のために bbskey を付与する
         """
         for x in self.threads:
             self.threads[x].update({"bbskey": bbskey})
@@ -245,46 +246,38 @@ class ThreadsDownloader:
         """
         スレッドが返ってくるまでダウンロードを試行
         """
-        def has_response(text: str) -> bool:
-            """
-            Gone. が返ってきたら False を返す
-            """
-            if "Gone.\n" in text:
-                print(f"{c.BG_RED}Received invalid response. Retrying...{c.RESET}")
-                return False
-            return True
 
-        def fetch(url: str) -> Response | None:
-            host = extract_hostname_from(url)
+        for _ in range(args.max_retry):
+
+            # Header に host を追加
+            matched = re.search(
+                r"(?:https?://)((?:[\w-]+(?:\.[\w-]+){1,}))",
+                url.strip())
+
+            host = matched.group(1) if matched else url.strip()
+
             try:
                 response = requests.get(url, headers={
                     "Alt-Used": host,
                     "Host": host,
                     "User-Agent": "Mozilla/5.0"
                 })
+
             except HTTPError as e:
                 print(e)
                 response = None
-            return response
 
-        def extract_hostname_from(url: str) -> str:
-            matched = re.search(
-                r"(?:https?://)((?:[\w-]+(?:\.[\w-]+){1,}))",
-                url.strip())
-            return matched.group(1) if matched else url.strip()
-
-        has_valid_response = False
-
-        while (has_valid_response is False):
-            response = fetch(url)
             if response is not None:
-                has_valid_response = has_response(response.text)
-                if not has_valid_response:
-                    sleep(args.sleep)
-                else:
+
+                # Gone. が返ってきたら False を返す
+                if not ("Gone.\n" in response.text):
+
                     return response.text
-            else:
-                sleep(args.sleep)
+
+                print(f"{c.BG_RED}Received invalid response. Retrying...{c.RESET}")
+
+            sleep(args.sleep)
+
         return None
 
 
@@ -367,6 +360,18 @@ class ConverterDB(Database):
         ))
         return self.cursor.fetchall()
 
+    def fetch_all_available(self) -> List[Tuple[str, int, str, str]]:
+        self.cursor.execute("""
+        SELECT
+            server,
+            bbs,
+            bbskey,
+            title
+        FROM
+            thread_indexes
+        """)
+        return self.cursor.fetchall()
+
     def fetch_raw_data(self, bbskey: int):
         self.cursor.execute("""
         SELECT
@@ -412,7 +417,7 @@ def database_not_found(error: Exception):
 
                 "database_helper.py を実行してテーブルを作成するんや
                 """)
-    exit(1)
+    sys.exit(1)
 
 
 def cores_calculate(x: int) -> int:
@@ -464,6 +469,24 @@ if __name__ == "__main__":
         type=int,
     )
 
+    parser.add_argument(
+        '-r',
+        '--max-retry',
+        default=5,
+        help="HTTPエラー発生時などの最大再試行回数 (既定: %(default)s回)",
+        metavar="tries",
+        required=False,
+        type=int,
+    )
+
+    parser.add_argument(
+        '--force-archive',
+        action='store_true',
+        default=False,
+        help="",
+        required=False,
+    )
+
     args = parser.parse_args()
 
     #
@@ -499,31 +522,42 @@ if __name__ == "__main__":
 
     dldr = ThreadsDownloader()
 
-    # ダウンロードURLを生成
-    posts = db.fetch_only_resumable()  # [(0, 1, 2), ]
+    #
+    # ダウンロードするURLリストをデータベースから取得
+    #
+
+    if args.force_archive is True:
+        # raw_text が埋まっていないものだけ
+        posts = db.fetch_all_available()  # [(0, 1, 2), ]
+
+    else:
+        # 増減ダウンロード
+        posts = db.fetch_only_resumable()
 
     if posts:
         print(f"{c.GREEN}スレッドを取得します{c.RESET}")
 
-    # ダウンロード
+    #
+    # ダウンロード開始
+    #
+
     generator = dldr.generate_response(
-        ["https://%s/test/read.cgi/%s/%s/" % (x[0], x[1], x[2])
-         for x in posts]
-    )
+        [f"https://{x[0]}/test/read.cgi/{x[1]}/{x[2]}/" for x in posts])
 
     for post in posts:
 
         bbskey: str = post[2]  # bbs key in JSON
         title: str = post[3]
 
-        print(f"{c.GREEN}{title}{c.RESET} ... ", end="")
+        print(f"{title} ... ", end="")
 
         try:
             text = next(generator)  # raw text from HTML
+
             if text is None:
                 raise DownloadError(
-                    "The page was failed to be retrieved and skipped due to an error while the process of downloading.\n"
-                )
+                    "The page was failed to be retrieved and skipped due to an error while the process of downloading.\n")
+
             db.update_raw_data(bbskey, text)
 
         except (KeyboardInterrupt, DownloadError) as e:
@@ -534,7 +568,7 @@ if __name__ == "__main__":
             print(
                 f"{c.GREEN}Saved the progress of what you have downloaded.{c.RESET}")
 
-            exit(1)
+            sys.exit(1)
 
         # 正常終了
         else:
@@ -546,7 +580,7 @@ if __name__ == "__main__":
         print(f"{c.GREEN}スレッドの取得に成功しました{c.RESET}")
 
     #
-    # 変換処理
+    # HTML の変換処理
     #
 
     bbskeys = []
@@ -563,9 +597,12 @@ if __name__ == "__main__":
         print(f"{c.GREEN}変換処理を開始します{c.RESET}")
 
     process_args: List[Tuple[int, str]] = []
+
     # bbskey をキーに raw_text からデータをとってくる
     for bbskey in bbskeys:
+
         for j in db.fetch_raw_data(int(bbskey)):
+
             process_args.append((int(bbskey), *j))
 
     # マルチプロセスで処理
@@ -573,6 +610,7 @@ if __name__ == "__main__":
         thread_processed = pool.starmap(convert_parallel, process_args)
 
     if thread_processed:
+
         for thread_in_processed in thread_processed:
             db.insert_messages(thread_in_processed)
 
