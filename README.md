@@ -13,12 +13,12 @@ Setup Python venv.
 
 |Shell|Command to enable venv|
 |:----|:----|
-|bash/zsh|$ source <venv>/bin/activate|
-|fish|$ source <venv>/bin/activate.fish|
-|csh/tcsh|$ source <venv>/bin/activate.csh|
-|PowerShell|$ <venv>/bin/Activate.ps1|
-|cmd.exe|C:\> <venv>\Scripts\activate.bat|
-|PowerShell|PS C:\> <venv>\Scripts\Activate.ps1|
+|bash/zsh|`$ source <venv>/bin/activate`|
+|fish|`$ source <venv>/bin/activate.fish`|
+|csh/tcsh|`$ source <venv>/bin/activate.csh`|
+|PowerShell|`$ <venv>/bin/Activate.ps1`|
+|cmd.exe|`C:\> <venv>\Scripts\activate.bat`|
+|PowerShell|`PS C:\> <venv>\Scripts\Activate.ps1`|
 
 We use this package managing method for this tool, so then install this:
 
@@ -37,8 +37,8 @@ rye sync
 you need to set the environmental variable for this program.
 ```
 # change as you prefer
-echo 'export JNAIDB_PATH=$HOME/.jnaidb.sqlite3' >> $HOME/.bashrc
-export JNAIDB_PATH=$HOME/.jnaidb.sqlite3
+echo 'export JNVADB_PATH=$HOME/.jnvadb.sqlite3' >> $HOME/.bashrc
+export JNVADB_PATH=$HOME/.jnvadb.sqlite3
 ```
 
 ### Create database

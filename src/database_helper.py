@@ -12,7 +12,7 @@ class Database:
 
     def connect_database(self):
         self.connect = sqlite3.connect(
-            os.environ['JNAIDB_PATH']
+            os.environ['JNVADB_PATH']
         )
         self.cursor = self.connect.cursor()
         return self
@@ -138,12 +138,12 @@ def create_database():
 
     except KeyError as e:
         print(traceback.format_exc(), end='')
-        if "JNAIDB_PATH" in "".join(e.args):
+        if "JNVADB_PATH" in "".join(e.args):
             print(dedent(
                 f"""
                 環境変数にデータベースの保存先を設定してください
-                {c.GREEN + "(e.g.)" + c.RESET} echo 'export JNAIDB_PATH=$HOME/.jnaidb.sqlite3' >> $HOME/.bashrc
-                {c.GREEN + "(e.g.)" + c.RESET} export JNAIDB_PATH=$HOME/.jnaidb.sqlite3
+                {c.GREEN + "(e.g.)" + c.RESET} echo 'export JNVADB_PATH=$HOME/.jnvadb.sqlite3' >> $HOME/.bashrc
+                {c.GREEN + "(e.g.)" + c.RESET} export JNVADB_PATH=$HOME/.jnvadb.sqlite3
                 """).strip())
         exit(1)
 
@@ -159,7 +159,7 @@ def create_database():
     else:
         print(dedent(
             f"""
-            データベースファイルの場所は {os.environ['JNAIDB_PATH']} です
+            データベースファイルの場所は {os.environ['JNVADB_PATH']} です
             正常終了しました
             """).strip())
 
