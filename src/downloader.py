@@ -10,11 +10,10 @@ from multiprocessing import Pool, cpu_count
 from re import findall
 from time import sleep
 from typing import Any, Dict, Generator, List, Tuple, TypeAlias
-from urllib.parse import quote
+# from pprint import pprint
 
 import requests
 from bs4 import BeautifulSoup
-from requests.exceptions import HTTPError
 
 from database_helper import Database
 from modules.color import Color as c
@@ -37,87 +36,66 @@ class ThreadsIndexer:
         """
         過去ログの API のURLに向かって繰り返しリクエストする
         """
+        API_URL="https://kakolog.jp/ajax/ajax_search.v16.cgi"
 
-        def query_generator() -> Generator[tuple[int, str], None, None]:
-            """
-            ページ送り / 次のページへ遷移
-            """
-            for i in count():
-                yield (i, "".join(
-                    ("https://kakolog.jp/ajax/ajax_search.v16.cgi",
-                     f"?q={quote(self.searchquery)}",
-                     f"&p={i}"))
-                )
-                # yield f"https://kakolog.jp/ajax/ajax_search.v16.cgi" \
-                #     + f"?q={quote(self.searchquery)}" \
-                #     + "&custom_date=" \
-                #     + "&d=" \
-                #     + "&o=" \
-                #     + "&resnum=" \
-                #     + "&bbs=" \
-                #     + "&custom_resnum=" \
-                #     + "&custom_resnum_dir=up" \
-                #     + f"&p={i}" \
-                #     + "&star="
-
-        generator = query_generator()
-
-        while True:
-
-            page, url = next(generator)
+        # ページ送り / 次のページへ遷移
+        for page in count():
 
             """
             スレッドのインデックスのデータが格納されている list[] を取得する
             最後のページでは [] が返されるので、代わりに空のオブジェクトを返す
             """
-            r = requests.get(url, headers={})
-
-            # サーバーが200以外を返したときの処理
-            if r.status_code != requests.codes.ok:
-                continue
-
-            # 最後のページに達した
-            if not r.json().get('list'):
-                print(f"{c.BLUE}最後のページ{c.RESET}")
-                break
-
-            print(f"ダウンロード完了 ({page + 1} ページ目)")
-
-            threads_chunk: Threads = {}
-
-            for status in r.json().get('list'):
-
-                # 暫定的に現行スレは省く (条件 -> "is_live" = "1" or resnum < 1002)
-                if int(status.get('is_live')) != 0:  # type: ignore
-                    continue
-
-                threads_chunk.update({
-                    "https://%s/test/read.cgi/%s/%s/" %
-                    (status.get('server'), status.get('bbs'), status.get('bbskey')): {  # type: ignore
-                        "ikioi": status.get('ikioi'),
-                        "bbskey": status.get('bbskey'),
-                        "created": status.get('created'),
-                        "site": status.get('site'),
-                        "is_live": status.get('is_live'),
-                        "bbs": status.get('bbs'),
-                        "is_update": status.get('is_update'),
-                        "updated": status.get('updated'),
-                        "id": status.get('id'),
-                        "server": status.get('server'),
-                        "title": status.get('title')
-                        .rstrip(),  # type: ignore
-                        "resnum": status.get('resnum')
-                    }
+            try:
+                r = requests.get(API_URL, headers={}, params={
+                    'q': self.searchquery, 'p': page,
+                    # "custom_date": '', "d": '', "o": '', "resnum": '', "bbs": '', "custom_resnum": '',
+                    # "custom_resnum_dirup": '', "star": '',
                 })
 
-            if threads_chunk:
-                # 抽出されたデータを辞書に格納する
-                self.threads.update(**threads_chunk)
-                sleep(args.sleep)
-            else:
-                # list[] が空になった？
-                break
+                # サーバーが200以外を返したときの処理
+                r.raise_for_status()
 
+            except requests.exceptions.HTTPError as e:
+                print(e)
+                sys.exit(1)
+
+            else:
+                # 最後のページに達した (list[] が空になった)
+                if not r.json().get('list'):
+                    print(f"{c.BLUE}最後のページ{c.RESET}")
+                    break
+
+                print(f"ダウンロード完了 ({page + 1} ページ目)")
+
+                for status in r.json().get('list'):
+
+                    # 暫定的に現行スレは省く (条件 -> "is_live" = "1" or resnum < 1002)
+                    if int(status.get('is_live')) != 0:  # type: ignore
+                        continue
+
+                    # 抽出されたデータを辞書に格納する
+                    self.threads.update({
+                        "https://%s/test/read.cgi/%s/%s/" %
+                        (status.get('server'), status.get('bbs'), status.get('bbskey')): {  # type: ignore
+                            "ikioi": status.get('ikioi'),
+                            "bbskey": status.get('bbskey'),
+                            "created": status.get('created'),
+                            "site": status.get('site'),
+                            "is_live": status.get('is_live'),
+                            "bbs": status.get('bbs'),
+                            "is_update": status.get('is_update'),
+                            "updated": status.get('updated'),
+                            "id": status.get('id'),
+                            "server": status.get('server'),
+                            "title": status.get('title')
+                            .rstrip(),  # type: ignore
+                            "resnum": status.get('resnum')
+                        }
+                    })
+
+            sleep(args.sleep)
+
+        sys.exit(1)
         return self
 
     def __message(self):
@@ -263,7 +241,7 @@ class ThreadsDownloader:
                     "User-Agent": "Mozilla/5.0"
                 })
 
-            except HTTPError as e:
+            except requests.exceptions.HTTPError as e:
                 print(e)
                 response = None
 
