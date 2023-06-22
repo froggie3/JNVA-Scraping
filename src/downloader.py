@@ -36,7 +36,7 @@ class ThreadsIndexer:
         """
         過去ログの API のURLに向かって繰り返しリクエストする
         """
-        API_URL="https://kakolog.jp/ajax/ajax_search.v16.cgi"
+        API_URL = "https://kakolog.jp/ajax/ajax_search.v16.cgi"
 
         # ページ送り / 次のページへ遷移
         for page in count():
@@ -95,7 +95,6 @@ class ThreadsIndexer:
 
             sleep(args.sleep)
 
-        sys.exit(1)
         return self
 
     def __message(self):
