@@ -481,9 +481,15 @@ if __name__ == "__main__":
 
         print(f"{c.BLUE}インデックスを取得します{c.RESET}")
 
-        dict_retrieved = indx.get_index()
-        dict_retrieved = {x: dict_retrieved[x]
-                          for x in reversed(dict_retrieved)}
+        try:
+            dict_retrieved = indx.get_index()
+            dict_retrieved = {x: dict_retrieved[x]
+                              for x in reversed(dict_retrieved)}
+
+        except KeyboardInterrupt as e:
+            print(e)
+            db.close()
+            sys.exit(1)
 
     try:
         # データベースに更新分だけ追加
