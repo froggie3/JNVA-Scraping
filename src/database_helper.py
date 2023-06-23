@@ -36,19 +36,20 @@ class DBCreation(Database):
         外部ウェブサイトから取得したスレッドのインデックスを格納する
         """
 
-        self.cursor.execute(dedent("""
-        CREATE TABLE IF NOT EXISTS thread_indexes(
-            server TEXT,
-            bbs TEXT,
-            bbskey INTEGER,
-            title TEXT,
-            resnum INTEGER,
-            created TEXT,
-            updated TEXT,
-            raw_text TEXT,
-            UNIQUE(bbs, bbskey)
-        )
-        """))
+        self.cursor.execute(dedent(
+            """
+            CREATE TABLE IF NOT EXISTS thread_indexes(
+                server TEXT,
+                bbs TEXT,
+                bbskey INTEGER,
+                title TEXT,
+                resnum INTEGER,
+                created TEXT,
+                updated TEXT,
+                raw_text TEXT,
+                UNIQUE(bbs, bbskey)
+            )
+            """))
         return self
 
     def __messages(self):
@@ -56,17 +57,18 @@ class DBCreation(Database):
         スレッドがレコードとして格納されるテーブル
         """
 
-        self.cursor.execute(dedent("""
-        CREATE TABLE IF NOT EXISTS messages(
-            bbskey INTEGER,
-            number INTEGER,
-            name TEXT,
-            date TEXT,
-            uid TEXT,
-            message TEXT,
-            UNIQUE(bbskey, number)
-        )
-        """))
+        self.cursor.execute(dedent(
+            """
+            CREATE TABLE IF NOT EXISTS messages(
+                bbskey INTEGER,
+                number INTEGER,
+                name TEXT,
+                date TEXT,
+                uid TEXT,
+                message TEXT,
+                UNIQUE(bbskey, number)
+            )
+            """))
 
         return self
 
@@ -75,19 +77,20 @@ class DBCreation(Database):
         差分のビューを作るのに必要
         """
 
-        self.cursor.execute(dedent("""
-        CREATE VIEW IF NOT EXISTS difference_bbskey AS
-        SELECT
-            bbskey
-        FROM
-            thread_indexes EXCEPT
-            SELECT DISTINCT
+        self.cursor.execute(dedent(
+            """
+            CREATE VIEW IF NOT EXISTS difference_bbskey AS
+            SELECT
                 bbskey
             FROM
-                messages
-            ORDER BY
-                1
-        """))
+                thread_indexes EXCEPT
+                SELECT DISTINCT
+                    bbskey
+                FROM
+                    messages
+                ORDER BY
+                    1
+            """))
 
         return self
 
@@ -98,19 +101,20 @@ class DBCreation(Database):
         アーカイブ済みの場所にある bbskey とインデックスのそれの差分
         """
 
-        self.cursor.execute(dedent("""
-        CREATE VIEW IF NOT EXISTS difference AS
-        SELECT
-            server,
-            bbs,
-            thread_indexes.bbskey,
-            title
-        FROM
-            difference_bbskey
-            INNER JOIN
-                thread_indexes
-            ON  thread_indexes.bbskey = difference_bbskey.bbskey
-        """))
+        self.cursor.execute(dedent(
+            """
+            CREATE VIEW IF NOT EXISTS difference AS
+            SELECT
+                server,
+                bbs,
+                thread_indexes.bbskey,
+                title
+            FROM
+                difference_bbskey
+                INNER JOIN
+                    thread_indexes
+                ON  thread_indexes.bbskey = difference_bbskey.bbskey
+            """))
 
         return self
 

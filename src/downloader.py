@@ -10,7 +10,6 @@ from multiprocessing import Pool, cpu_count
 from re import findall
 from time import sleep
 from typing import Any, Dict, Generator, List, Tuple, TypeAlias
-# from pprint import pprint
 
 import requests
 from bs4 import BeautifulSoup
@@ -46,14 +45,14 @@ class ThreadsIndexer:
             最後のページでは [] が返されるので、代わりに空のオブジェクトを返す
             """
             try:
-                r = requests.get(API_URL, headers={}, params={
+                response = requests.get(API_URL, headers={}, params={
                     'q': self.searchquery, 'p': page,
                     # "custom_date": '', "d": '', "o": '', "resnum": '', "bbs": '', "custom_resnum": '',
                     # "custom_resnum_dirup": '', "star": '',
                 })
 
                 # サーバーが200以外を返したときの処理
-                r.raise_for_status()
+                response.raise_for_status()
 
             except requests.exceptions.HTTPError as e:
                 print(e)
@@ -61,13 +60,13 @@ class ThreadsIndexer:
 
             else:
                 # 最後のページに達した (list[] が空になった)
-                if not r.json().get('list'):
+                if not response.json().get('list'):
                     print(f"{c.BLUE}最後のページ{c.RESET}")
                     break
 
                 print(f"ダウンロード完了 ({page + 1} ページ目)")
 
-                for status in r.json().get('list'):
+                for status in response.json().get('list'):
 
                     # 暫定的に現行スレは省く (条件 -> "is_live" = "1" or resnum < 1002)
                     if int(status.get('is_live')) != 0:  # type: ignore
@@ -239,6 +238,9 @@ class ThreadsDownloader:
                     "Host": host,
                     "User-Agent": "Mozilla/5.0"
                 })
+
+                # サーバーが200以外を返したときの処理
+                response.raise_for_status()
 
             except requests.exceptions.HTTPError as e:
                 print(e)
