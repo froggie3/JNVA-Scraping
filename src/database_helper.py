@@ -14,9 +14,11 @@ from modules.color import Color as c
 class Database:
 
     def connect_database(self):
-        self.connect = sqlite3.connect(
-            os.environ['JNVADB_PATH']
-        )
+
+        # 環境変数を .env からも読み込む
+        load_dotenv()
+
+        self.connect = sqlite3.connect(os.environ.get('JNVADB_PATH'))
         self.cursor = self.connect.cursor()
         return self
 
@@ -140,9 +142,6 @@ def create_database():
     """
     create_db = DBCreation()
 
-    # 環境変数を .env からも読み込む
-    load_dotenv()
-
     try:
         create_db.connect_database()
 
@@ -169,7 +168,7 @@ def create_database():
     else:
         print(dedent(
             f"""
-            データベースファイルの場所は {os.environ['JNVADB_PATH']} です
+            データベースファイルの場所は {os.environ.get('JNVADB_PATH')} です
             正常終了しました
             """).strip())
 
