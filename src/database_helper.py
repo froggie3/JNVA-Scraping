@@ -1,9 +1,12 @@
+#!/usr/bin/env python3
 # from pprint import pprint
 import os
 import sqlite3
 import traceback
 from sqlite3 import OperationalError
 from textwrap import dedent
+
+from dotenv import load_dotenv
 
 from modules.color import Color as c
 
@@ -136,6 +139,9 @@ def create_database():
     データベースを作成し、テーブルとビューを作成する
     """
     create_db = DBCreation()
+
+    # 環境変数を .env からも読み込む
+    load_dotenv()
 
     try:
         create_db.connect_database()

@@ -1,15 +1,18 @@
 # JNVA-Scraping
 
-A few scripts which helps you to retrieve all the JSON-formatted threads on なんJNVA部.
+A script which helps you to retrieve all the backup for NJVA
 
 ## Updates
+
+__2023/6/24: Created `.env` for setting
+Settings for DB location was moved in the `.env` file.
 
 __2023/6/19: Complete rewrite!__
 Things gonna be done with Python altogether!
 
 ## How to Prepare?
 
-Setup Python venv.
+Setup a virtual environment for python to work.
 
 |Shell|Command to enable venv|
 |:----|:----|
@@ -20,11 +23,11 @@ Setup Python venv.
 |cmd.exe|`C:\> <venv>\Scripts\activate.bat`|
 |PowerShell|`PS C:\> <venv>\Scripts\Activate.ps1`|
 
-We use this package managing method for this tool, so then install this:
+In this project, __rye__ is used as packages managing tools, which is really comprehensive and useful for managing the project, so then please before install this if you have not installed yet:
 
 https://github.com/mitsuhiko/rye
 
-and then,
+if you are sure to the rye installed on your computer then type this to sync requirements.
 
 ```bash
 rye sync
@@ -34,11 +37,22 @@ rye sync
 
 ### Setting the environmental variable
 
-you need to set the environmental variable for this program.
+You have to create `.env` file into the root directory of this repository directory for this program, where it should be on the same place as this README.md is located, or which is in the parent directory of `src/`.
+
+And then, you can write like this:
+
+```shell
+# for the directory of database file, you have the right to change!
+JNVADB_PATH=/your/path/.to_the_database.sqlite3
 ```
-# change as you prefer
-echo 'export JNVADB_PATH=$HOME/.jnvadb.sqlite3' >> $HOME/.bashrc
-export JNVADB_PATH=$HOME/.jnvadb.sqlite3
+
+or you can manually set the environmental variable. 
+
+However, note that in this case, you CANNOT run this script with cron, which really makes it difficult to import environment variables.
+
+```shell
+echo 'export JNVADB_PATH=/your/path/.to_the_database.sqlite3' >> $HOME/.bashrc
+source $HOME/.bashrc
 ```
 
 ### Create database

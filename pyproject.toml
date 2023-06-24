@@ -1,7 +1,7 @@
 [project]
 name = "jnva-scraping"
 version = "0.1.0"
-description = "Add a short description here"
+description = "A scripts which helps you to retrieve all the backup for NJVA."
 authors = [
     { name = "Yokkin", email = "neutrino@yokkin.com" }
 ]
@@ -10,6 +10,8 @@ dependencies = [
     "requests~=2.31.0",
     "types-beautifulsoup4~=4.12.0.5",
     "types-requests~=2.31.0.1",
+    "python-dotenv",
+    "bs4"
 ]
 readme = "README.md"
 requires-python = ">= 3.8"

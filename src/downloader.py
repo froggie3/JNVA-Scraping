@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import json
 # import os
@@ -13,6 +14,7 @@ from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
 from database_helper import Database
 from modules.color import Color as c
