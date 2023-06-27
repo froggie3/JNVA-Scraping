@@ -207,11 +207,11 @@ class ThreadsDownloader:
     def generate_response(self, threads: List[str]) \
             -> Generator[str | None, None, None]:
         """
-        条件に応じて、fetch_thread() を回す
+        条件に応じて、__fetch_thread() を回す
         """
         for url in threads:
 
-            thread = self.fetch_thread(url)
+            thread = self.__fetch_thread(url)
 
             if thread:
                 # Replace "Shift_JIS" with "UTF-8" in meta tag
@@ -220,7 +220,7 @@ class ThreadsDownloader:
             else:
                 yield thread  # None
 
-    def fetch_thread(self, url: str) -> str | None:
+    def __fetch_thread(self, url: str) -> str | None:
         """
         スレッドが返ってくるまでダウンロードを試行
         """
