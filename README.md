@@ -1,18 +1,29 @@
 # JNVA-Scraping
 
-A script which helps you to retrieve all the backup for NJVA
+A script which helps you retrieve all the threads, and retain all the backup for NJVA.
 
 ## Updates
 
-__2023/6/24: Created `.env` for setting
-Settings for DB location was moved in the `.env` file.
+__2023/6/24__: `.env` file was introduced to give us a ability to set the location for the database to contain an archive for threads.
 
 __2023/6/19: Complete rewrite!__
 Things gonna be done with Python altogether!
 
-## How to Prepare?
+## How to get started?
 
-Setup a virtual environment for python to work.
+First, clone this repository, and change a current directory to where it was cloned.
+
+If you are sure to the rye installed on your computer, then type this to install requirements.
+
+```bash
+rye sync
+```
+
+Note: in this project, __rye__ is used as packages managing tools, which is really comprehensive and useful for managing the project, so then please before install this if you have not installed yet:
+
+https://github.com/mitsuhiko/rye
+
+Setup a virtual environment for Python to work.
 
 |Shell|Command to enable venv|
 |:----|:----|
@@ -23,15 +34,6 @@ Setup a virtual environment for python to work.
 |cmd.exe|`C:\> <venv>\Scripts\activate.bat`|
 |PowerShell|`PS C:\> <venv>\Scripts\Activate.ps1`|
 
-In this project, __rye__ is used as packages managing tools, which is really comprehensive and useful for managing the project, so then please before install this if you have not installed yet:
-
-https://github.com/mitsuhiko/rye
-
-if you are sure to the rye installed on your computer then type this to sync requirements.
-
-```bash
-rye sync
-```
 
 ## Before you start
 
