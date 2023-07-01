@@ -44,17 +44,21 @@ class DBCreation(Database):
         self.cursor.execute(dedent(
             """
             CREATE TABLE IF NOT EXISTS thread_indexes(
-                server TEXT,
-                bbs TEXT,
-                bbskey INTEGER,
-                title TEXT,
-                resnum INTEGER,
-                created TEXT,
-                updated TEXT,
-                raw_text TEXT,
+                server TEXT NOT NULL,
+                bbs TEXT NOT NULL,
+                bbskey INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                resnum INTEGER NOT NULL,
+                created TEXT NOT NULL,
+                updated TEXT NOT NULL
+                raw_text TEXT NOT NULL,
                 UNIQUE(bbs, bbskey)
             )
             """))
+
+        self.cursor.execute(
+            'ALTER TABLE thread_indexes ADD is_live INTEGER NOT NULL DEFAULT 1')
+
         return self
 
     def __messages(self):
@@ -65,12 +69,12 @@ class DBCreation(Database):
         self.cursor.execute(dedent(
             """
             CREATE TABLE IF NOT EXISTS messages(
-                bbskey INTEGER,
-                number INTEGER,
-                name TEXT,
-                date TEXT,
-                uid TEXT,
-                message TEXT,
+                bbskey INTEGER NOT NULL,
+                number INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                date TEXT NOT NULL,
+                uid TEXT NOT NULL,
+                message TEXT NOT NULL,
                 UNIQUE(bbskey, number)
             )
             """))
@@ -79,23 +83,29 @@ class DBCreation(Database):
 
     def __difference_bbskey(self):
         """
-        差分のビューを作るのに必要
+        差分をとるのに必要なビューを作成する
+
+        テーブル `messages` にある `bbskey` カラムにあるレコードの重複を除くと、変換済みのスレッドの `bbskey` を抽出できる。
+        それをテーブル thread_indexes 側の `bbskey` と差分を取ったものが変換するべきスレッドといえる。
+        しかし、それでは更新分に対応できないので、
+        - `is_live = 1` かつ
+        - 埋められていないスレッド（レスが1002未満） かつ
+        - APIから拾える `is_live = 1` の値が毎回変動するので、14 日以内でないスレッドは既に過去ログにあるものとして無視し、
+        これらに合致する `bbskey` を抽出した上で、`UNION` 句でそれと合成し取得するビューを作成する。
         """
+        self.cursor.execute(
+            'DROP VIEW IF EXISTS difference_bbskey')
 
         self.cursor.execute(dedent(
-            """
-            CREATE VIEW IF NOT EXISTS difference_bbskey AS
-            SELECT
-                bbskey
-            FROM
-                thread_indexes EXCEPT
-                SELECT DISTINCT
-                    bbskey
-                FROM
-                    messages
-                ORDER BY
-                    1
-            """))
+            '''
+            CREATE VIEW difference_bbskey AS
+            SELECT bbskey FROM thread_indexes
+                EXCEPT SELECT DISTINCT bbskey FROM messages
+            UNION
+            SELECT bbskey FROM thread_indexes
+                WHERE is_live = 1 AND resnum < 1002 AND datetime('now','-14 days') < updated
+            ORDER BY 1
+            '''))
 
         return self
 
@@ -124,14 +134,12 @@ class DBCreation(Database):
         return self
 
     def create_tables(self):
-        self.__thread_indexes() \
-            .__messages()
+        self.__thread_indexes().__messages()
 
         return self
 
     def create_views(self):
-        self.__difference_bbskey() \
-            .__difference()
+        self.__difference_bbskey().__difference()
 
         return self
 
@@ -157,9 +165,7 @@ def create_database():
         exit(1)
 
     try:
-        create_db \
-            .create_tables() \
-            .create_views()
+        create_db.create_tables().create_views()
 
     except OperationalError as e:
         print(e)
@@ -173,9 +179,7 @@ def create_database():
             """).strip())
 
     finally:
-        create_db \
-            .commit() \
-            .close()
+        create_db.commit().close()
 
 
 if __name__ == "__main__":

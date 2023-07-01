@@ -71,8 +71,8 @@ class ThreadsIndexer:
                 for status in response.json().get('list'):
 
                     # 暫定的に現行スレは省く (条件 -> "is_live" = "1" or resnum < 1002)
-                    if int(status.get('is_live')) != 0:  # type: ignore
-                        continue
+                    # if int(status.get('is_live')) != 0:  # type: ignore
+                    #    continue
 
                     # 抽出されたデータを辞書に格納する
                     self.threads.update({
@@ -293,18 +293,25 @@ class ConverterDB(Database):
         """
         インデックスをテーブルに挿入する
         """
+        # raw_textは後から更新するので空っぽにしておく
         self.cursor.executemany("""
         INSERT OR IGNORE INTO thread_indexes
-        VALUES (
-            :server,
-            :bbs,
-            :bbskey,
-            :title,
-            :resnum,
-            :created,
-            :updated,
-            ''
-        )""", data.values())
+            (server, bbs, bbskey, title, created, raw_text)
+        VALUES
+            (:server, :bbs, :bbskey, :title, :created, '')
+        """, data.values())
+
+        return self
+
+    def update_indexes(self, data: Threads):
+        """
+        以下は更新される可能性があるものなので更新する
+        """
+        self.cursor.executemany("""
+        UPDATE thread_indexes
+        SET resnum = :resnum, updated = :updated, is_live = :is_live
+        WHERE bbskey = :bbskey
+        """, data.values())
 
         return self
 
@@ -326,6 +333,9 @@ class ConverterDB(Database):
         return self
 
     def fetch_only_resumable(self) -> List[Tuple[str, int, str, str]]:
+        """
+        2023/7/1 - "OR is_live = 1" 追加
+        """
         self.cursor.execute("""
         SELECT
             server,
@@ -335,7 +345,7 @@ class ConverterDB(Database):
         FROM
             thread_indexes
         WHERE
-            raw_text IS ?
+            raw_text IS ? OR is_live = 1
         """, (
             '',
         ))
@@ -496,8 +506,12 @@ if __name__ == "__main__":
             sys.exit(1)
 
     try:
-        # データベースに更新分だけ追加
-        db.insert_indexes(dict_retrieved).commit()
+        # インデックスから取得したデータをデータベースに追加し、必要な分だけ更新する
+        db.insert_indexes(
+            dict_retrieved
+        ).update_indexes(
+            dict_retrieved
+        ).commit()
 
     except Exception as e:
         database_not_found(e)
@@ -543,14 +557,14 @@ if __name__ == "__main__":
 
             if text is None:
                 raise DownloadError(
-                    "The page was failed to be retrieved and skipped due to an error while the process of downloading.\n")
+                    "The page was failed to be retrieved and skipped due to an error while the process of downloading.")
 
             db.update_raw_data(bbskey, text)
 
         except (KeyboardInterrupt, DownloadError) as e:
             db.commit().close()
 
-            print(f"{c.BG_RED}{''.join(e.args)}{c.RESET}")
+            print(f"{c.BG_RED}{''.join(e.args)}{c.RESET}\n")
 
             print(
                 f"{c.GREEN}Saved the progress of what you have downloaded.{c.RESET}")
