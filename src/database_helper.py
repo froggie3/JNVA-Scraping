@@ -18,7 +18,8 @@ class Database:
         # 環境変数を .env からも読み込む
         load_dotenv()
 
-        self.connect = sqlite3.connect(os.environ.get('JNVADB_PATH'))
+        self.connect = sqlite3.connect(
+            os.environ.get('JNVADB_PATH'))  # type: ignore
         self.cursor = self.connect.cursor()
         return self
 
@@ -50,7 +51,7 @@ class DBCreation(Database):
                 title TEXT NOT NULL,
                 resnum INTEGER NOT NULL,
                 created TEXT NOT NULL,
-                updated TEXT NOT NULL
+                updated TEXT NOT NULL,
                 raw_text TEXT NOT NULL,
                 UNIQUE(bbs, bbskey)
             )
@@ -93,8 +94,8 @@ class DBCreation(Database):
         - APIから拾える `is_live = 1` の値が毎回変動するので、14 日以内でないスレッドは既に過去ログにあるものとして無視し、
         これらに合致する `bbskey` を抽出した上で、`UNION` 句でそれと合成し取得するビューを作成する。
         """
-        self.cursor.execute(
-            'DROP VIEW IF EXISTS difference_bbskey')
+        # self.cursor.execute(
+        #     'DROP VIEW IF EXISTS difference_bbskey')
 
         self.cursor.execute(dedent(
             '''

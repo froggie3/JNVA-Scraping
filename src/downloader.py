@@ -9,12 +9,12 @@ from datetime import datetime, timedelta, timezone
 from itertools import count
 from multiprocessing import Pool, cpu_count
 from re import findall
+from textwrap import dedent
 from time import sleep
 from typing import Any, Dict, Generator, List, Tuple, TypeAlias
 
 import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
 from database_helper import Database
 from modules.color import Color as c
@@ -69,10 +69,6 @@ class ThreadsIndexer:
                 print(f"ダウンロード完了 ({page + 1} ページ目)")
 
                 for status in response.json().get('list'):
-
-                    # 暫定的に現行スレは省く (条件 -> "is_live" = "1" or resnum < 1002)
-                    # if int(status.get('is_live')) != 0:  # type: ignore
-                    #    continue
 
                     # 抽出されたデータを辞書に格納する
                     self.threads.update({
@@ -280,13 +276,11 @@ class ConverterDB(Database):
         self.cursor.executemany("""
         INSERT OR IGNORE INTO messages
         VALUES (
-            :bbskey,
-            :number,
-            :name,
-            :date,
-            :uid,
-            :message
-        )""", threads.values())
+            :bbskey, :number,
+            :name, :date,
+            :uid, :message
+        )
+        """, threads.values())
         return self
 
     def insert_indexes(self, data: Threads):
@@ -294,24 +288,31 @@ class ConverterDB(Database):
         インデックスをテーブルに挿入する
         """
         # raw_textは後から更新するので空っぽにしておく
-        self.cursor.executemany("""
-        INSERT OR IGNORE INTO thread_indexes
-            (server, bbs, bbskey, title, created, raw_text)
-        VALUES
-            (:server, :bbs, :bbskey, :title, :created, '')
-        """, data.values())
+        indexes = data.values()
 
-        return self
-
-    def update_indexes(self, data: Threads):
-        """
-        以下は更新される可能性があるものなので更新する
-        """
-        self.cursor.executemany("""
-        UPDATE thread_indexes
-        SET resnum = :resnum, updated = :updated, is_live = :is_live
-        WHERE bbskey = :bbskey
-        """, data.values())
+        for index in indexes:
+            self.cursor.execute(
+                """
+                INSERT INTO thread_indexes (
+                    server, bbs, bbskey, title, resnum,
+                    created, updated, raw_text, is_live)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)
+                ON CONFLICT (bbs, bbskey)
+                DO UPDATE SET
+                    resnum  = ?,
+                    updated = ?,
+                    is_live = ?
+                """, (index.get('server'),
+                      index.get('bbs'),
+                      index.get('bbskey'),
+                      index.get('title'),
+                      index.get('resnum'),
+                      index.get('created'),
+                      index.get('updated'),
+                      index.get('is_live'),
+                      index.get('resnum'),
+                      index.get('updated'),
+                      index.get('is_live')))
 
         return self
 
@@ -333,22 +334,7 @@ class ConverterDB(Database):
         return self
 
     def fetch_only_resumable(self) -> List[Tuple[str, int, str, str]]:
-        """
-        2023/7/1 - "OR is_live = 1" 追加
-        """
-        self.cursor.execute("""
-        SELECT
-            server,
-            bbs,
-            bbskey,
-            title
-        FROM
-            thread_indexes
-        WHERE
-            raw_text IS ? OR is_live = 1
-        """, (
-            '',
-        ))
+        self.cursor.execute("SELECT * FROM difference")
         return self.cursor.fetchall()
 
     def fetch_all_available(self) -> List[Tuple[str, int, str, str]]:
@@ -371,18 +357,11 @@ class ConverterDB(Database):
             thread_indexes
         WHERE
             bbskey = ?
-        """, (
-            bbskey,
-        ))
+        """, (bbskey,))
         return self.cursor
 
     def fetch_bbs_key(self):
-        self.cursor.execute("""
-        SELECT
-            bbskey
-        FROM
-            difference
-        """)
+        self.cursor.execute("SELECT bbskey FROM difference")
         return self.cursor
 
 
@@ -402,12 +381,12 @@ def database_not_found(error: Exception):
     for arg in error.args:
         if arg.find("no such table"):
             print(traceback.format_exc())
-            print(
+            print(dedent(
                 f"""
                 {c.RED,}エラーが発生したで！{c.RESET}
 
                 "database_helper.py を実行してテーブルを作成するんや
-                """)
+                """))
     sys.exit(1)
 
 
@@ -507,11 +486,7 @@ if __name__ == "__main__":
 
     try:
         # インデックスから取得したデータをデータベースに追加し、必要な分だけ更新する
-        db.insert_indexes(
-            dict_retrieved
-        ).update_indexes(
-            dict_retrieved
-        ).commit()
+        db.insert_indexes(dict_retrieved).commit()
 
     except Exception as e:
         database_not_found(e)
