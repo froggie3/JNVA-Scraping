@@ -3,6 +3,7 @@ import argparse
 import json
 # import os
 import re
+import sqlite3
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -29,7 +30,7 @@ Posts: TypeAlias = Dict[int, Post]
 
 class ThreadsIndexer:
 
-    def __init__(self, query: str, args: Dict[str, str | bool]) -> None:
+    def __init__(self, query: str) -> None:
         self.searchquery = query
         self.threads: Threads = {}
 
@@ -37,27 +38,24 @@ class ThreadsIndexer:
         """
         過去ログの API のURLに向かって繰り返しリクエストする
         """
-        API_URL = "https://kakolog.jp/ajax/ajax_search.v16.cgi"
+        api_url = "https://kakolog.jp/ajax/ajax_search.v16.cgi"
 
         # ページ送り / 次のページへ遷移
         for page in count():
-
-            """
-            スレッドのインデックスのデータが格納されている list[] を取得する
-            最後のページでは [] が返されるので、代わりに空のオブジェクトを返す
-            """
+            # スレッドのインデックスのデータが格納されている list[] を取得する
+            # 最後のページでは [] が返されるので、代わりに空のオブジェクトを返す
             try:
-                response = requests.get(API_URL, headers={}, params={
+                response = requests.get(api_url, headers={}, params={
                     'q': self.searchquery, 'p': page,
                     # "custom_date": '', "d": '', "o": '', "resnum": '', "bbs": '', "custom_resnum": '',
                     # "custom_resnum_dirup": '', "star": '',
-                })
+                }, timeout=5)
 
                 # サーバーが200以外を返したときの処理
                 response.raise_for_status()
 
-            except requests.exceptions.HTTPError as e:
-                print(e)
+            except requests.exceptions.HTTPError as error:
+                print(error)
                 sys.exit(1)
 
             else:
@@ -72,8 +70,7 @@ class ThreadsIndexer:
 
                     # 抽出されたデータを辞書に格納する
                     self.threads.update({
-                        "https://%s/test/read.cgi/%s/%s/" %
-                        (status.get('server'), status.get('bbs'), status.get('bbskey')): {  # type: ignore
+                        f"https://{status.get('server')}/test/read.cgi/{status.get('bbs')}/{status.get('bbskey')}/": {  # type: ignore
                             "ikioi": status.get('ikioi'),
                             "bbskey": status.get('bbskey'),
                             "created": status.get('created'),
@@ -104,7 +101,8 @@ class ThreadsIndexer:
         return self
 
     def get_index(self) -> Threads:
-        self.__request_api().__message()
+        self.__request_api()
+        self.__message()
 
         return self.threads
 
@@ -122,12 +120,12 @@ class Converter:
         """
         HTMLをパースして辞書の形に整える
         """
-        posts = self.soup.find_all('article')
+        post_elements = self.soup.find_all('article')
         number = name = date = uid = message = ""
-        EXCEEDED_OR_RONIN = 1000
+        exceeded_or_ronin = 1000
 
-        for post in posts:
-            metas = post.find_all("details", class_="post-header")
+        for element in post_elements:
+            metas = element.find_all("details", class_="post-header")
 
             for meta in metas:
 
@@ -148,11 +146,11 @@ class Converter:
                     .find("span", class_="uid") \
                     .get_text(strip=True)[3:]
 
-            message = post \
+            message = element \
                 .find("section", class_="post-content") \
                 .get_text('\n', strip=True)
 
-            if EXCEEDED_OR_RONIN < int(number):
+            if exceeded_or_ronin < int(number):
                 break
 
             thread_datetime_extracted = findall(r'\d+', date)
@@ -177,17 +175,17 @@ class Converter:
 
         return self
 
-    def __add_bbskey(self, bbskey: int):
+    def __add_bbskey(self, bbs_key: int):
         """
-        データベースの正規化のために bbskey を付与する
+        データベースの正規化のために bbs_key を付与する
         """
         for x in self.threads:
-            self.threads[x].update({"bbskey": bbskey})
+            self.threads[x].update({"bbskey": bbs_key})
         return self
 
-    def convert(self, bbskey: int) -> Posts:
-        self.__elements_to_object() \
-            .__add_bbskey(bbskey)
+    def convert(self, bbs_key: int) -> Posts:
+        self.__elements_to_object()
+        self.__add_bbskey(bbs_key)
         return self.threads
 
     def json(self, **kwargs: Any) -> str:
@@ -235,20 +233,19 @@ class ThreadsDownloader:
                     "Alt-Used": host,
                     "Host": host,
                     "User-Agent": "Mozilla/5.0"
-                })
+                }, timeout=10)
 
                 # サーバーが200以外を返したときの処理
                 response.raise_for_status()
 
-            except requests.exceptions.HTTPError as e:
-                print(e)
+            except requests.exceptions.HTTPError as error:
+                print(error)
                 response = None
 
             if response is not None:
 
                 # Gone. が返ってきたら False を返す
-                if not ("Gone.\n" in response.text):
-
+                if "Gone.\n" not in response.text:
                     return response.text
 
                 print(f"{c.BG_RED}Received invalid response. Retrying...{c.RESET}")
@@ -256,15 +253,6 @@ class ThreadsDownloader:
             sleep(args.sleep)
 
         return None
-
-
-class dotdict(dict):  # type: ignore
-    """
-    dot.notation access to dictionary attributes
-    """
-    __getattr__ = dict.get  # type: ignore
-    __setattr__ = dict.__setitem__  # type: ignore
-    __delattr__ = dict.__delitem__  # type: ignore
 
 
 class ConverterDB(Database):
@@ -316,7 +304,7 @@ class ConverterDB(Database):
 
         return self
 
-    def update_raw_data(self, bbskey: str, markup: str):
+    def update_raw_data(self, bbs_key: str, markup: str):
         """
         生のHTMLデータをインデックスに挿入する
         """
@@ -328,7 +316,7 @@ class ConverterDB(Database):
         WHERE
             bbskey = :bbskey
         """, {
-            "bbskey": bbskey,
+            "bbskey": bbs_key,
             "text": markup
         })
         return self
@@ -349,7 +337,7 @@ class ConverterDB(Database):
         """)
         return self.cursor.fetchall()
 
-    def fetch_raw_data(self, bbskey: int):
+    def fetch_raw_data(self, bbs_key: int):
         self.cursor.execute("""
         SELECT
             raw_text
@@ -357,7 +345,7 @@ class ConverterDB(Database):
             thread_indexes
         WHERE
             bbskey = ?
-        """, (bbskey,))
+        """, (bbs_key,))
         return self.cursor
 
     def fetch_bbs_key(self):
@@ -369,10 +357,10 @@ class DownloadError(Exception):
     pass
 
 
-def convert_parallel(bbskey: int, text: str):
-    thread = Converter(text)
-    threads = thread.convert(bbskey)
-    print(f"Thread conversion {c.GREEN}{str(bbskey)}{c.RESET} OK")
+def convert_parallel(bbs_key: int, markup_text: str):
+    thread = Converter(markup_text)
+    threads = thread.convert(bbs_key)
+    print(f"Thread conversion {c.GREEN}{str(bbs_key)}{c.RESET} OK")
     return threads
 
 
@@ -464,13 +452,12 @@ if __name__ == "__main__":
     #
 
     db = ConverterDB()
-    db.connect_database()
 
     if args.skip:
         dict_retrieved = {}
 
     else:
-        indx = ThreadsIndexer(args.query, vars(args))
+        indx = ThreadsIndexer(args.query)
 
         print(f"{c.BLUE}インデックスを取得します{c.RESET}")
 
@@ -488,7 +475,7 @@ if __name__ == "__main__":
         # インデックスから取得したデータをデータベースに追加し、必要な分だけ更新する
         db.insert_indexes(dict_retrieved).commit()
 
-    except Exception as e:
+    except sqlite3.OperationalError as e:
         database_not_found(e)
         db.close()
 
@@ -565,8 +552,7 @@ if __name__ == "__main__":
         # bbskey を取得する
         bbskeys = [key[0] for key in db.fetch_bbs_key()]
 
-    except Exception as e:
-
+    except sqlite3.OperationalError as e:
         database_not_found(e)
 
     if bbskeys:
@@ -576,10 +562,8 @@ if __name__ == "__main__":
 
     # bbskey をキーに raw_text からデータをとってくる
     for bbskey in bbskeys:
-
-        for j in db.fetch_raw_data(int(bbskey)):
-
-            process_args.append((int(bbskey), *j))
+        for raw in db.fetch_raw_data(int(bbskey)):
+            process_args.append((int(bbskey), *raw))
 
     # マルチプロセスで処理
     with Pool(processes=cores_calculate(args.cores)) as pool:

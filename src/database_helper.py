@@ -13,15 +13,13 @@ from modules.color import Color as c
 
 class Database:
 
-    def connect_database(self):
-
+    def __init__(self):
         # 環境変数を .env からも読み込む
         load_dotenv()
-
         self.connect = sqlite3.connect(
-            os.environ.get('JNVADB_PATH'))  # type: ignore
+            os.environ.get('JNVADB_PATH')   # type: ignore
+        )
         self.cursor = self.connect.cursor()
-        return self
 
     def rollback(self):
         self.connect.rollback()
@@ -135,12 +133,14 @@ class DBCreation(Database):
         return self
 
     def create_tables(self):
-        self.__thread_indexes().__messages()
+        self.__thread_indexes()
+        self.__messages()
 
         return self
 
     def create_views(self):
-        self.__difference_bbskey().__difference()
+        self.__difference_bbskey()
+        self.__difference()
 
         return self
 
@@ -149,14 +149,13 @@ def create_database():
     """
     データベースを作成し、テーブルとビューを作成する
     """
-    create_db = DBCreation()
 
     try:
-        create_db.connect_database()
+        create_db = DBCreation()
 
-    except KeyError as e:
+    except KeyError as error:
         print(traceback.format_exc(), end='')
-        if "JNVADB_PATH" in "".join(e.args):
+        if "JNVADB_PATH" in "".join(error.args):
             print(dedent(
                 f"""
                 環境変数にデータベースの保存先を設定してください
@@ -168,9 +167,8 @@ def create_database():
     try:
         create_db.create_tables().create_views()
 
-    except OperationalError as e:
-        print(e)
-        pass
+    except OperationalError as error:
+        print(error)
 
     else:
         print(dedent(
