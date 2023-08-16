@@ -44,20 +44,18 @@ class ThreadsIndexer:
         for page in count():
             # スレッドのインデックスのデータが格納されている list[] を取得する
             # 最後のページでは [] が返されるので、代わりに空のオブジェクトを返す
+            params = {
+                'q': self.searchquery, 'p': page,
+                # "custom_date": '', "d": '', "o": '', "resnum": '', "bbs": '', "custom_resnum": '',
+                # "custom_resnum_dirup": '', "star": '',
+            }
+
             try:
-                response = requests.get(api_url, headers={}, params={
-                    'q': self.searchquery, 'p': page,
-                    # "custom_date": '', "d": '', "o": '', "resnum": '', "bbs": '', "custom_resnum": '',
-                    # "custom_resnum_dirup": '', "star": '',
-                }, timeout=5)
-
-                # サーバーが200以外を返したときの処理
+                response = requests.get(api_url, headers={}, params=params, timeout=5)
                 response.raise_for_status()
-
             except requests.exceptions.HTTPError as error:
                 print(error)
                 sys.exit(1)
-
             else:
                 # 最後のページに達した (list[] が空になった)
                 if not response.json().get('list'):
@@ -67,7 +65,6 @@ class ThreadsIndexer:
                 print(f"ダウンロード完了 ({page + 1} ページ目)")
 
                 for status in response.json().get('list'):
-
                     # 抽出されたデータを辞書に格納する
                     self.threads.update({
                         f"https://{status.get('server')}/test/read.cgi/{status.get('bbs')}/{status.get('bbskey')}/": {  # type: ignore
@@ -88,22 +85,18 @@ class ThreadsIndexer:
                     })
 
             sleep(args.sleep)
-
         return self
 
     def __message(self):
-
         if self.threads:
             print(f"{c.BLUE}インデックスの取得に成功しました{c.RESET}")
         else:
             print(f"{c.RED}インデックスの取得に失敗しました{c.RESET}")
-
         return self
 
     def get_index(self) -> Threads:
         self.__request_api()
         self.__message()
-
         return self.threads
 
 
@@ -128,19 +121,15 @@ class Converter:
             metas = element.find_all("details", class_="post-header")
 
             for meta in metas:
-
                 number = meta \
                     .find("span", class_="postid") \
                     .get_text(strip=True)
-
                 name = meta \
                     .find("span", class_="postusername") \
                     .get_text(' ', strip=True)
-
                 date = meta \
                     .find("span", class_="date") \
                     .get_text(strip=True)
-
                 # slicing uid with "ID:"; e.g. "ID:TKRPJpAI0" -> "TKRPJpAI0"
                 uid = meta \
                     .find("span", class_="uid") \
@@ -198,15 +187,12 @@ class Converter:
 
 class ThreadsDownloader:
 
-    def generate_response(self, threads: List[str]) \
-            -> Generator[str | None, None, None]:
+    def generate_response(self, threads: List[str]) -> Generator[str | None, None, None]:
         """
         条件に応じて、__fetch_thread() を回す
         """
         for url in threads:
-
             thread = self.__fetch_thread(url)
-
             if thread:
                 # Replace "Shift_JIS" with "UTF-8" in meta tag
                 yield thread.replace('charset=Shift_JIS', 'charset="UTF-8"')
@@ -218,36 +204,23 @@ class ThreadsDownloader:
         """
         スレッドが返ってくるまでダウンロードを試行
         """
-
         for _ in range(args.max_retry):
-
-            # Header に host を追加
-            matched = re.search(
-                r"(?:https?://)((?:[\w-]+(?:\.[\w-]+){1,}))",
-                url.strip())
-
+            headers = {}
+            matched = re.search( r"(?:https?://)((?:[\w-]+(?:\.[\w-]+){1,}))", url.strip())
             host = matched.group(1) if matched else url.strip()
+            headers = { "Alt-Used": host, "Host": host, "User-Agent": "Mozilla/5.0" }
 
             try:
-                response = requests.get(url, headers={
-                    "Alt-Used": host,
-                    "Host": host,
-                    "User-Agent": "Mozilla/5.0"
-                }, timeout=10)
-
+                response = requests.get(url, headers=headers, timeout=10)
                 # サーバーが200以外を返したときの処理
                 response.raise_for_status()
-
             except requests.exceptions.HTTPError as error:
                 print(error)
                 response = None
 
             if response is not None:
-
-                # Gone. が返ってきたら False を返す
                 if "Gone.\n" not in response.text:
                     return response.text
-
                 print(f"{c.BG_RED}Received invalid response. Retrying...{c.RESET}")
 
             sleep(args.sleep)
@@ -384,66 +357,15 @@ def cores_calculate(x: int) -> int:
 
 
 if __name__ == "__main__":
+    cpus = cpu_count() // 2
 
-    parser = argparse.ArgumentParser(
-        description='スレッドをデータベースに保存する',
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-
-    parser.add_argument(
-        '-q',
-        '--query',
-        default="なんJNVA部",
-        help="検索クエリを指定 (既定:「%(default)s」)",
-        metavar="query",
-        required=False,
-    )
-
-    parser.add_argument(
-        '-s',
-        '--skip',
-        action='store_true',
-        default=False,
-        help="インデックスを取得しない (変換処理だけしたいとき便利です)",
-        required=False,
-    )
-
-    parser.add_argument(
-        '-c',
-        '--cores',
-        default=cpu_count() // 2,
-        help="指定した数のコアを変換処理に使う (このコンピュータでの既定: %(default)s)",
-        required=False,
-        type=int,
-    )
-
-    parser.add_argument(
-        '-t',
-        '--sleep',
-        default=5,
-        help="どれくらいの間隔で落とすか (既定: %(default)s秒)",
-        metavar="secs",
-        required=False,
-        type=int,
-    )
-
-    parser.add_argument(
-        '-r',
-        '--max-retry',
-        default=5,
-        help="HTTPエラー発生時などの最大再試行回数 (既定: %(default)s回)",
-        metavar="tries",
-        required=False,
-        type=int,
-    )
-
-    parser.add_argument(
-        '--force-archive',
-        action='store_true',
-        default=False,
-        help="",
-        required=False,
-    )
+    parser = argparse.ArgumentParser( description='スレッドをデータベースに保存する', formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument( '-q', '--query', default="なんJNVA部", help="検索クエリを指定 (既定:「%(default)s」)", metavar="query", required=False)
+    parser.add_argument( '-s', '--skip', action='store_true', default=False, help="インデックスを取得しない (変換処理だけしたいとき便利です)", required=False)
+    parser.add_argument( '-c', '--cores', default=cpus, help="指定した数のコアを変換処理に使う (このコンピュータでの既定: %(default)s)", required=False, type=int)
+    parser.add_argument( '-t', '--sleep', default=5, help="どれくらいの間隔で落とすか (既定: %(default)s秒)", metavar="secs", required=False, type=int)
+    parser.add_argument( '-r', '--max-retry', default=5, help="HTTPエラー発生時などの最大再試行回数 (既定: %(default)s回)", metavar="tries", required=False, type=int)
+    parser.add_argument( '--force-archive', action='store_true', default=False, help="", required=False)
 
     args = parser.parse_args()
 
@@ -455,17 +377,14 @@ if __name__ == "__main__":
 
     if args.skip:
         dict_retrieved = {}
-
     else:
         indx = ThreadsIndexer(args.query)
-
         print(f"{c.BLUE}インデックスを取得します{c.RESET}")
 
         try:
             dict_retrieved = indx.get_index()
             dict_retrieved = {x: dict_retrieved[x]
                               for x in reversed(dict_retrieved)}
-
         except KeyboardInterrupt as e:
             print(e)
             db.close()
@@ -474,7 +393,6 @@ if __name__ == "__main__":
     try:
         # インデックスから取得したデータをデータベースに追加し、必要な分だけ更新する
         db.insert_indexes(dict_retrieved).commit()
-
     except sqlite3.OperationalError as e:
         database_not_found(e)
         db.close()
@@ -492,7 +410,6 @@ if __name__ == "__main__":
     if args.force_archive is True:
         # raw_text が埋まっていないものだけ
         posts = db.fetch_all_available()  # [(0, 1, 2), ]
-
     else:
         # 増減ダウンロード
         posts = db.fetch_only_resumable()
@@ -508,32 +425,24 @@ if __name__ == "__main__":
         [f"https://{x[0]}/test/read.cgi/{x[1]}/{x[2]}/" for x in posts])
 
     for post in posts:
-
         bbskey: str = post[2]  # bbs key in JSON
         title: str = post[3]
 
         print(f"{title} ... ", end="")
 
         try:
-            text = next(generator)  # raw text from HTML
-
+            # raw text from HTML
+            text = next(generator)  
             if text is None:
-                raise DownloadError(
-                    "The page was failed to be retrieved and skipped due to an error while the process of downloading.")
-
+                msg = "The page was failed to be retrieved and skipped due to an error while the process of downloading." 
+                raise DownloadError(msg)
             db.update_raw_data(bbskey, text)
-
         except (KeyboardInterrupt, DownloadError) as e:
             db.commit().close()
-
             print(f"{c.BG_RED}{''.join(e.args)}{c.RESET}\n")
-
-            print(
-                f"{c.GREEN}Saved the progress of what you have downloaded.{c.RESET}")
-
+            msg = f"{c.GREEN}Saved the progress of what you have downloaded.{c.RESET}" 
+            print(msg)
             sys.exit(1)
-
-        # 正常終了
         else:
             db.commit()
 
@@ -549,9 +458,7 @@ if __name__ == "__main__":
     bbskeys = []
 
     try:
-        # bbskey を取得する
         bbskeys = [key[0] for key in db.fetch_bbs_key()]
-
     except sqlite3.OperationalError as e:
         database_not_found(e)
 
@@ -565,20 +472,14 @@ if __name__ == "__main__":
         for raw in db.fetch_raw_data(int(bbskey)):
             process_args.append((int(bbskey), *raw))
 
-    # マルチプロセスで処理
     with Pool(processes=cores_calculate(args.cores)) as pool:
         thread_processed = pool.starmap(convert_parallel, process_args)
 
     if thread_processed:
-
         for thread_in_processed in thread_processed:
             db.insert_messages(thread_in_processed)
-
         print("アーカイブ中 ...")
-
         db.commit().close()
-
         print(f"{c.GREEN}全てのスレッドを保存しました{c.RESET}")
-
     else:
         print("更新はありません")
