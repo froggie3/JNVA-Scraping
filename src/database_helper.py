@@ -1,36 +1,12 @@
 #!/usr/bin/env python3
 # from pprint import pprint
 import os
-import sqlite3
 import traceback
 from sqlite3 import OperationalError
 from textwrap import dedent
 
-from dotenv import load_dotenv
-
 from modules.color import Color as c
-
-
-class Database:
-
-    def __init__(self):
-        # 環境変数を .env からも読み込む
-        load_dotenv()
-        self.connect = sqlite3.connect(
-            os.environ.get('JNVADB_PATH')   # type: ignore
-        )
-        self.cursor = self.connect.cursor()
-
-    def rollback(self):
-        self.connect.rollback()
-
-    def commit(self):
-        self.connect.commit()
-        return self
-
-    def close(self):
-        self.connect.close()
-        return
+from modules.classes import Database
 
 
 class DBCreation(Database):
